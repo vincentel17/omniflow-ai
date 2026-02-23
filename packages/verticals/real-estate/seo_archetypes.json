@@ -1,10 +1,17 @@
 {
-  "version": 1,
-  "archetypes": [
-    {
-      "slug": "neighborhood-guide",
-      "intent": "local-discovery"
-    }
-  ]
+  "version": 2,
+  "service_page_pattern": {
+    "sections": ["Neighborhood Snapshot", "Market Trends", "Buyer Guidance", "Seller Guidance", "CTA"],
+    "cta": "Schedule a local market consultation"
+  },
+  "blog_cluster": "neighborhood-buyer-seller-guides",
+  "listing_page_pattern": ["Property highlights", "Neighborhood context", "Disclosures"],
+  "disclaimer_rules": {
+    "required": [
+      "Equal Housing Opportunity.",
+      "Information is deemed reliable but not guaranteed."
+    ]
+  },
+  "schema_defaults": ["RealEstateAgent", "Residence", "FAQPage"]
 }
 

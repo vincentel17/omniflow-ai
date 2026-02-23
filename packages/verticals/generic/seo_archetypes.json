@@ -1,10 +1,11 @@
 {
-  "version": 1,
-  "archetypes": [
-    {
-      "slug": "service-page",
-      "intent": "transactional"
-    }
-  ]
+  "version": 2,
+  "service_page_pattern": {
+    "sections": ["Hero", "Service Overview", "Proof", "FAQ", "CTA"],
+    "cta": "Book a consultation"
+  },
+  "blog_cluster": "local-service-growth",
+  "blog_patterns": ["how-to", "comparison", "checklist"],
+  "schema_defaults": ["LocalBusiness", "FAQPage"]
 }
 

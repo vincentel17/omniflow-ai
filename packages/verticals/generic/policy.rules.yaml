@@ -1,6 +1,11 @@
 content:
   prohibited_words: []
+  review_response:
+    tone: professional
+    required_disclaimers: []
 actions:
   blocked: []
 risk:
-  overrides: {}
+  overrides:
+    seo_generate: TIER_1
+    review_response_draft: TIER_1

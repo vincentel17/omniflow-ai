@@ -2,6 +2,10 @@ content:
   prohibited_words:
     - "whites only"
     - "no children"
+  review_response:
+    tone: professional
+    required_disclaimers:
+      - "Equal Housing Opportunity."
 actions:
   blocked:
     - "auto_send_contract"
@@ -9,3 +13,5 @@ risk:
   overrides:
     publish_listing: TIER_2
     auto_send_contract: TIER_4
+    seo_generate: TIER_2
+    review_response_draft: TIER_2
