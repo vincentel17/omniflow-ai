@@ -240,10 +240,22 @@ def patch_lead(
     context: RequestContext = Depends(get_request_context),
 ) -> LeadResponse:
     lead = _lead_with_scope(db=db, context=context, lead_id=lead_id)
+    previous_status = lead.status
     updates = payload.model_dump(exclude_none=True)
     for key, value in updates.items():
         setattr(lead, key, value)
     db.flush()
+    if "status" in updates and lead.status != previous_status:
+        write_event(
+            db=db,
+            org_id=context.current_org_id,
+            source="lead",
+            channel="lead",
+            event_type="LEAD_STATUS_CHANGED",
+            lead_id=str(lead.id),
+            payload_json={"from_status": previous_status.value, "to_status": lead.status.value},
+            actor_id=str(context.current_user_id),
+        )
     write_audit_log(
         db=db,
         context=context,

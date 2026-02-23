@@ -97,6 +97,16 @@ def create_campaign_plan(
         payload_json={"pack_slug": pack_slug},
         actor_id=str(context.current_user_id),
     )
+    write_event(
+        db=db,
+        org_id=context.current_org_id,
+        source="campaigns",
+        channel="campaigns",
+        event_type="CAMPAIGN_PLAN_CREATED",
+        campaign_id=str(campaign.id),
+        payload_json={"pack_slug": pack_slug},
+        actor_id=str(context.current_user_id),
+    )
     db.commit()
     db.refresh(campaign)
     return _serialize_campaign(campaign)
@@ -155,6 +165,17 @@ def approve_campaign(
         payload_json={"status": payload.status.value},
         actor_id=str(context.current_user_id),
     )
+    if payload.status == ApprovalStatus.APPROVED:
+        write_event(
+            db=db,
+            org_id=context.current_org_id,
+            source="approval",
+            channel="campaigns",
+            event_type="CAMPAIGN_PLAN_APPROVED",
+            campaign_id=str(campaign.id),
+            payload_json={"status": payload.status.value},
+            actor_id=str(context.current_user_id),
+        )
     db.commit()
     db.refresh(campaign)
     return _serialize_campaign(campaign)
@@ -217,6 +238,17 @@ def generate_campaign_content(
             campaign_id=str(campaign.id),
             content_id=str(row.id),
             payload_json={"risk_tier": row.risk_tier.value, "warnings": row.policy_warnings_json},
+            actor_id=str(context.current_user_id),
+        )
+        write_event(
+            db=db,
+            org_id=context.current_org_id,
+            source="content",
+            channel=row.channel,
+            event_type="CONTENT_CREATED",
+            campaign_id=str(campaign.id),
+            content_id=str(row.id),
+            payload_json={"status": row.status.value, "risk_tier": row.risk_tier.value},
             actor_id=str(context.current_user_id),
         )
         write_audit_log(

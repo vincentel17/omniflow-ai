@@ -175,6 +175,17 @@ def approve_content(
         payload_json={"status": payload.status.value},
         actor_id=str(context.current_user_id),
     )
+    if payload.status == ApprovalStatus.APPROVED:
+        write_event(
+            db=db,
+            org_id=context.current_org_id,
+            source="approval",
+            channel=item.channel,
+            event_type="CONTENT_APPROVED",
+            content_id=str(item.id),
+            payload_json={"status": payload.status.value},
+            actor_id=str(context.current_user_id),
+        )
 
     db.commit()
     db.refresh(item)
@@ -247,6 +258,16 @@ def schedule_content(
         source="publish",
         channel=item.channel,
         event_type="PUBLISH_JOB_QUEUED",
+        content_id=str(item.id),
+        payload_json={"publish_job_id": str(job.id)},
+        actor_id=str(context.current_user_id),
+    )
+    write_event(
+        db=db,
+        org_id=context.current_org_id,
+        source="content",
+        channel=item.channel,
+        event_type="CONTENT_SCHEDULED",
         content_id=str(item.id),
         payload_json={"publish_job_id": str(job.id)},
         actor_id=str(context.current_user_id),
