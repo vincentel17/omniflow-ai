@@ -2,8 +2,14 @@
   "version": 1,
   "pipelines": [
     {
-      "id": "generic-content-pipeline",
-      "steps": ["plan", "draft", "review", "publish"]
+      "id": "generic-smb-pipeline",
+      "name": "Generic SMB Pipeline",
+      "stages": [
+        { "slug": "lead", "name": "Lead" },
+        { "slug": "qualified", "name": "Qualified" },
+        { "slug": "proposal", "name": "Proposal" },
+        { "slug": "closed", "name": "Closed", "exit_on_win": true }
+      ]
     }
   ]
 }

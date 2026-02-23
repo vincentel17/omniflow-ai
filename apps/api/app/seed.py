@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from .db import SessionLocal
 from .models import Membership, Org, Role, User, VerticalPack
+from .services.phase4 import ensure_pipeline_templates, ensure_sla_config
 from .settings import settings
 
 
@@ -32,7 +33,12 @@ def main() -> None:
 
         vertical_pack = db.scalar(select(VerticalPack).where(VerticalPack.org_id == dev_org_id))
         if vertical_pack is None:
-            db.add(VerticalPack(org_id=dev_org_id, pack_slug="generic"))
+            vertical_pack = VerticalPack(org_id=dev_org_id, pack_slug="generic")
+            db.add(vertical_pack)
+            db.flush()
+
+        ensure_pipeline_templates(db=db, org_id=dev_org_id, pack_slug=vertical_pack.pack_slug)
+        ensure_sla_config(db=db, org_id=dev_org_id)
 
         db.commit()
     print(f"Seed complete: org={dev_org_id} user={dev_user_id} pack=generic")

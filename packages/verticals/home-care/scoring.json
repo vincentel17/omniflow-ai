@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "factors": [
+    {
+      "name": "caregiver_request",
+      "weight": 1.5
+    }
+  ]
+}

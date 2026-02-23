@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "pipelines": [
+    {
+      "id": "home-care-intake",
+      "name": "Home Care Intake Pipeline",
+      "stages": [
+        { "slug": "lead", "name": "Lead" },
+        { "slug": "assessment", "name": "Assessment" },
+        { "slug": "care-plan", "name": "Care Plan" },
+        { "slug": "active-client", "name": "Active Client", "exit_on_win": true }
+      ]
+    }
+  ]
+}

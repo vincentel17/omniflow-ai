@@ -69,6 +69,46 @@ class PublishJobStatus(str, enum.Enum):
     CANCELED = "canceled"
 
 
+class InboxThreadType(str, enum.Enum):
+    COMMENT = "comment"
+    DM = "dm"
+    FORM = "form"
+    EMAIL = "email"
+    SMS = "sms"
+    OTHER = "other"
+
+
+class InboxThreadStatus(str, enum.Enum):
+    OPEN = "open"
+    PENDING = "pending"
+    CLOSED = "closed"
+
+
+class InboxMessageDirection(str, enum.Enum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+
+
+class LeadStatus(str, enum.Enum):
+    NEW = "new"
+    QUALIFIED = "qualified"
+    UNQUALIFIED = "unqualified"
+    ARCHIVED = "archived"
+
+
+class NurtureTaskType(str, enum.Enum):
+    EMAIL = "email"
+    SMS = "sms"
+    CALL = "call"
+    TASK = "task"
+
+
+class NurtureTaskStatus(str, enum.Enum):
+    OPEN = "open"
+    DONE = "done"
+    CANCELED = "canceled"
+
+
 class IdMixin:
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
@@ -402,3 +442,180 @@ class LinkTracking(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     short_code: Mapped[str] = mapped_column(String(32), nullable=False)
     destination_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     utm_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class Pipeline(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "pipelines"
+    __table_args__ = (
+        UniqueConstraint("org_id", "slug", name="uq_pipelines_org_slug"),
+        Index("ix_pipelines_org_id", "org_id"),
+        Index("ix_pipelines_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
+    config_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class Stage(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "stages"
+    __table_args__ = (
+        UniqueConstraint("org_id", "pipeline_id", "slug", name="uq_stages_org_pipeline_slug"),
+        Index("ix_stages_org_id", "org_id"),
+        Index("ix_stages_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    pipeline_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipelines.id"), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sequence: Mapped[int] = mapped_column(nullable=False, default=0)
+    exit_on_win: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class Lead(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "leads"
+    __table_args__ = (
+        Index("ix_leads_org_id", "org_id"),
+        Index("ix_leads_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    source: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[LeadStatus] = mapped_column(
+        Enum(LeadStatus, name="lead_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=LeadStatus.NEW,
+    )
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    location_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    tags_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+
+
+class InboxThread(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "inbox_threads"
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "provider",
+            "account_ref",
+            "external_thread_id",
+            name="uq_inbox_threads_org_provider_account_external",
+        ),
+        Index("ix_inbox_threads_org_id", "org_id"),
+        Index("ix_inbox_threads_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    external_thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    thread_type: Mapped[InboxThreadType] = mapped_column(
+        Enum(InboxThreadType, name="inbox_thread_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    participants_json: Mapped[list[dict[str, object]]] = mapped_column(JsonType, nullable=False, default=list)
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[InboxThreadStatus] = mapped_column(
+        Enum(InboxThreadStatus, name="inbox_thread_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=InboxThreadStatus.OPEN,
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("leads.id"), nullable=True)
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class InboxMessage(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "inbox_messages"
+    __table_args__ = (
+        UniqueConstraint("org_id", "thread_id", "external_message_id", name="uq_inbox_messages_org_thread_external"),
+        Index("ix_inbox_messages_org_id", "org_id"),
+        Index("ix_inbox_messages_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    thread_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("inbox_threads.id"), nullable=False)
+    external_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    direction: Mapped[InboxMessageDirection] = mapped_column(
+        Enum(InboxMessageDirection, name="inbox_message_direction_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    sender_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    sender_display: Mapped[str] = mapped_column(String(255), nullable=False)
+    body_text: Mapped[str] = mapped_column(String(8000), nullable=False)
+    body_raw_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    flags_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class LeadScore(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "lead_scores"
+    __table_args__ = (
+        UniqueConstraint("org_id", "lead_id", name="uq_lead_scores_org_lead"),
+        Index("ix_lead_scores_org_id", "org_id"),
+        Index("ix_lead_scores_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    lead_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("leads.id"), nullable=False)
+    score_total: Mapped[int] = mapped_column(nullable=False, default=0)
+    score_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    model_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1")
+
+
+class LeadAssignment(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "lead_assignments"
+    __table_args__ = (
+        UniqueConstraint("org_id", "lead_id", name="uq_lead_assignments_org_lead"),
+        Index("ix_lead_assignments_org_id", "org_id"),
+        Index("ix_lead_assignments_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    lead_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("leads.id"), nullable=False)
+    assigned_to_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    rule_applied: Mapped[str] = mapped_column(String(100), nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class NurtureTask(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "nurture_tasks"
+    __table_args__ = (
+        Index("ix_nurture_tasks_org_id", "org_id"),
+        Index("ix_nurture_tasks_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    lead_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("leads.id"), nullable=False)
+    type: Mapped[NurtureTaskType] = mapped_column(
+        Enum(NurtureTaskType, name="nurture_task_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[NurtureTaskStatus] = mapped_column(
+        Enum(NurtureTaskStatus, name="nurture_task_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=NurtureTaskStatus.OPEN,
+    )
+    template_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    payload_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class SLAConfig(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "sla_configs"
+    __table_args__ = (
+        UniqueConstraint("org_id", name="uq_sla_configs_org_id"),
+        Index("ix_sla_configs_org_id", "org_id"),
+        Index("ix_sla_configs_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    response_time_minutes: Mapped[int] = mapped_column(nullable=False, default=30)
+    escalation_minutes: Mapped[int] = mapped_column(nullable=False, default=60)
+    notify_channels_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)

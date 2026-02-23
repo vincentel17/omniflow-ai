@@ -10,6 +10,12 @@ from .models import (
     BrandProfile,
     CampaignPlanStatus,
     ContentItemStatus,
+    InboxMessageDirection,
+    InboxThreadStatus,
+    InboxThreadType,
+    LeadStatus,
+    NurtureTaskStatus,
+    NurtureTaskType,
     PublishJobStatus,
     RiskTier,
     Role,
@@ -254,3 +260,146 @@ class ConnectorHealthResponse(BaseModel):
     last_error_at: datetime | None
     last_error_msg: str | None
     consecutive_failures: int
+
+
+class InboxIngestMockRequest(BaseModel):
+    thread: dict[str, object]
+    messages: list[dict[str, object]] = Field(default_factory=list)
+
+
+class InboxIngestMockResponse(BaseModel):
+    thread_id: uuid.UUID
+    inserted_messages: int
+
+
+class InboxThreadResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    provider: str
+    account_ref: str
+    external_thread_id: str
+    thread_type: InboxThreadType
+    subject: str | None
+    participants_json: list[dict[str, object]]
+    last_message_at: datetime | None
+    status: InboxThreadStatus
+    lead_id: uuid.UUID | None
+    assigned_to_user_id: uuid.UUID | None
+    created_at: datetime
+
+
+class InboxMessageResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    thread_id: uuid.UUID
+    external_message_id: str
+    direction: InboxMessageDirection
+    sender_ref: str
+    sender_display: str
+    body_text: str
+    body_raw_json: dict[str, object]
+    flags_json: dict[str, object]
+    created_at: datetime
+
+
+class InboxAssignRequest(BaseModel):
+    assigned_to_user_id: uuid.UUID
+
+
+class ReplySuggestionResponse(BaseModel):
+    intent: str
+    reply_text: str
+    followup_questions: list[str]
+    risk_tier: RiskTier
+    required_disclaimers: list[str]
+    policy_warnings: list[str] = Field(default_factory=list)
+
+
+class DraftReplyRequest(BaseModel):
+    body_text: str = Field(min_length=1, max_length=2000)
+
+
+class LeadResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    source: str
+    status: LeadStatus
+    name: str | None
+    email: str | None
+    phone: str | None
+    location_json: dict[str, object]
+    tags_json: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class LeadPatchRequest(BaseModel):
+    status: LeadStatus | None = None
+    name: str | None = Field(default=None, max_length=255)
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=64)
+    location_json: dict[str, object] | None = None
+    tags_json: list[str] | None = None
+
+
+class LeadScoreResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    lead_id: uuid.UUID
+    score_total: int
+    score_json: dict[str, object]
+    scored_at: datetime
+    model_version: str
+
+
+class LeadAssignmentResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    lead_id: uuid.UUID
+    assigned_to_user_id: uuid.UUID
+    rule_applied: str
+    assigned_at: datetime
+    created_at: datetime
+
+
+class NurtureTaskResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    lead_id: uuid.UUID
+    type: NurtureTaskType
+    due_at: datetime
+    status: NurtureTaskStatus
+    template_key: str | None
+    payload_json: dict[str, object]
+    created_by: uuid.UUID | None
+    created_at: datetime
+
+
+class NurtureTaskPayload(BaseModel):
+    type: NurtureTaskType
+    due_in_minutes: int = Field(ge=1, le=10080)
+    message_template_key: str = Field(min_length=1, max_length=100)
+    message_body: str = Field(min_length=1, max_length=2000)
+
+
+class NurtureApplyRequest(BaseModel):
+    tasks: list[NurtureTaskPayload] = Field(default_factory=list, max_length=20)
+
+
+class NurtureTaskUpdateRequest(BaseModel):
+    status: NurtureTaskStatus
+
+
+class SLAConfigPayload(BaseModel):
+    response_time_minutes: int = Field(default=30, ge=1, le=10080)
+    escalation_minutes: int = Field(default=60, ge=1, le=10080)
+    notify_channels_json: list[str] = Field(default_factory=list)
+
+
+class SLAConfigResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    response_time_minutes: int
+    escalation_minutes: int
+    notify_channels_json: list[str]
+    created_at: datetime
