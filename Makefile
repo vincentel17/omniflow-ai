@@ -29,3 +29,6 @@ seed:
 
 release-check:
 	pnpm run release-check
+
+smoke:
+	powershell -ExecutionPolicy Bypass -File ./scripts/smoke.ps1

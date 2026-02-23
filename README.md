@@ -94,6 +94,24 @@ See `docs/connectors.md` for architecture and extension guidance.
 7. Minimal UI pages:
    - `/inbox`, `/leads`, `/settings/sla`
 
+## Phase 8 usage (Deployment readiness + ops controls)
+
+1. Configure environment profile:
+   - `APP_ENV=development|staging|production`
+   - use `.env.staging.example` or `.env.production.example` for non-dev
+2. Manage org kill switches:
+   - `GET /ops/settings`
+   - `PATCH /ops/settings`
+3. Onboarding flow:
+   - `POST /onboarding/start`
+   - `GET /onboarding/status`
+   - `POST /onboarding/step/{step_id}/complete`
+4. Staging smoke/deploy checks:
+   - `make smoke` or `pnpm smoke`
+   - `pnpm deploy-check`
+5. Operations runbook:
+   - `docs/operations.md`
+
 ## Troubleshooting
 
 - If preflight fails on env vars, ensure `.env` includes all keys in `.env.schema.json`.

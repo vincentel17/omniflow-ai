@@ -21,6 +21,8 @@
     "build": "pnpm --filter @omniflow/schemas build && pnpm --filter @omniflow/web build",
     "migrate": "python -m alembic -c apps/api/alembic.ini upgrade head",
     "seed": "python -m app.seed",
+    "smoke": "powershell -ExecutionPolicy Bypass -File ./scripts/smoke.ps1",
+    "deploy-check": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-check.ps1",
     "security:deps": "pnpm audit --prod && python -m pip_audit -r apps/api/requirements.audit.txt --no-deps && python -m pip_audit -r apps/worker/requirements.audit.txt --no-deps",
     "security:sast": "node ./scripts/run-semgrep.mjs",
     "release-check": "pnpm run check && pnpm run test && pnpm run test-e2e && pnpm run build && pnpm run security:deps && pnpm run security:sast"
