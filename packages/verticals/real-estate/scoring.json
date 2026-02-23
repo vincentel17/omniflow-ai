@@ -1,9 +1,30 @@
 {
-  "version": 1,
+  "version": 2,
   "factors": [
     {
+      "name": "buyer_intent_preapproval",
+      "weight": 18,
+      "keywords": ["pre-approved", "preapproved", "mortgage ready", "financing approved"]
+    },
+    {
+      "name": "seller_intent_listing_timeline",
+      "weight": 20,
+      "keywords": ["list my home", "selling soon", "list this month", "moving by"]
+    },
+    {
       "name": "showing_request",
-      "weight": 2.0
+      "weight": 14,
+      "keywords": ["showing", "tour", "view property", "open house"]
+    },
+    {
+      "name": "urgency_signal",
+      "weight": 22,
+      "keywords": ["asap", "today", "urgent", "this week", "immediately"]
+    },
+    {
+      "name": "geo_match",
+      "weight": 10,
+      "keywords": ["charlotte", "raleigh", "durham", "miami", "orlando"]
     }
   ]
 }

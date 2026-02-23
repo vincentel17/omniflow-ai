@@ -1,0 +1,13 @@
+Subject: Offer Update for {{property_address}}
+
+Hi {{client_name}},
+
+Quick update on your offer for {{property_address}}:
+- Status: {{offer_status}}
+- Next milestone: {{next_step}}
+- Timing: {{timing_note}}
+
+I will keep you updated as soon as we receive any response.
+
+Best,
+{{agent_name}}

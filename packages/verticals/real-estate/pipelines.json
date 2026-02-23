@@ -1,14 +1,19 @@
 {
-  "version": 1,
+  "version": 2,
   "pipelines": [
     {
       "id": "real-estate-sales",
       "name": "Real Estate Sales Pipeline",
       "stages": [
         { "slug": "lead", "name": "Lead" },
-        { "slug": "appt", "name": "Appointment" },
+        { "slug": "consultation-showing", "name": "Consultation / Showing" },
+        { "slug": "offer-submitted", "name": "Offer Submitted" },
         { "slug": "under-contract", "name": "Under Contract" },
-        { "slug": "closed", "name": "Closed", "exit_on_win": true }
+        { "slug": "due-diligence", "name": "Due Diligence" },
+        { "slug": "appraisal", "name": "Appraisal" },
+        { "slug": "closing-scheduled", "name": "Closing Scheduled" },
+        { "slug": "closed-won", "name": "Closed Won", "exit_on_win": true },
+        { "slug": "closed-lost", "name": "Closed Lost", "exit_on_loss": true }
       ]
     }
   ]

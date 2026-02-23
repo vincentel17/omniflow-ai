@@ -1,10 +1,32 @@
 {
-  "version": 1,
+  "version": 2,
   "workflows": [
     {
-      "id": "open-house-followup",
-      "trigger": "open_house_completed",
-      "actions": ["send_followup_template"]
+      "id": "re-new-lead-consultation",
+      "trigger": "lead.created",
+      "conditions": [{ "field": "classification", "op": "in", "value": ["buyer", "seller"] }],
+      "actions": [
+        { "type": "task.create", "template_key": "consultation_schedule" },
+        { "type": "task.create", "template_key": "showing_prep" }
+      ]
+    },
+    {
+      "id": "re-under-contract-checklist",
+      "trigger": "deal.stage_changed",
+      "conditions": [{ "field": "pipeline_stage", "op": "eq", "value": "under-contract" }],
+      "actions": [
+        { "type": "checklist.apply", "template_key": "under_contract_core" },
+        { "type": "task.create", "template_key": "inspection_scheduling" }
+      ]
+    },
+    {
+      "id": "re-closed-post-close",
+      "trigger": "deal.stage_changed",
+      "conditions": [{ "field": "pipeline_stage", "op": "eq", "value": "closed-won" }],
+      "actions": [
+        { "type": "reputation.campaign.create", "template_key": "post_close_review_request" },
+        { "type": "content.pack.create", "template_key": "post_close_social_pack" }
+      ]
     }
   ]
 }

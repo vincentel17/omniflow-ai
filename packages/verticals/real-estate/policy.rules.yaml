@@ -2,6 +2,20 @@ content:
   prohibited_words:
     - "whites only"
     - "no children"
+    - "christian neighborhood"
+    - "ideal for families only"
+    - "no section 8"
+    - "safe for your race"
+    - "perfect for young couples only"
+  required_disclaimers:
+    listing_description:
+      - "Equal Housing Opportunity."
+      - "Information deemed reliable but not guaranteed."
+    cma_narrative:
+      - "This comparative market analysis is an estimate and not an appraisal."
+      - "Equal Housing Opportunity."
+    marketing_content:
+      - "Equal Housing Opportunity."
   review_response:
     tone: professional
     required_disclaimers:
@@ -10,8 +24,13 @@ actions:
   blocked:
     - "auto_send_contract"
 risk:
+  high_risk_categories:
+    - "housing_protected_class_language"
+    - "guaranteed_outcome_claims"
   overrides:
     publish_listing: TIER_2
     auto_send_contract: TIER_4
     seo_generate: TIER_2
     review_response_draft: TIER_2
+    cma_generate: TIER_2
+    listing_package_generate: TIER_2

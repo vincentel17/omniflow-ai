@@ -1,0 +1,14 @@
+Subject: Closing Reminder - {{property_address}}
+
+Hi {{client_name}},
+
+Closing for {{property_address}} is scheduled for {{closing_date}}.
+Please review the final checklist:
+- Final walk-through completed
+- Funds and identification ready
+- Required signatures confirmed
+
+Reach out if you want a quick pre-closing call.
+
+Best,
+{{agent_name}}

@@ -1,0 +1,12 @@
+Subject: Inspection Scheduling for {{property_address}}
+
+Hi {{client_name}},
+
+To stay on timeline, we should schedule the inspection for one of these windows:
+- {{window_1}}
+- {{window_2}}
+
+Please confirm your preferred option and I will coordinate with all parties.
+
+Best,
+{{agent_name}}

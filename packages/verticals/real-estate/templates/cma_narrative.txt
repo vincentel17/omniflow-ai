@@ -1,0 +1,13 @@
+Comparative Market Analysis Summary
+
+Subject property: {{property_address}}
+Estimated value range: {{range_low}} - {{range_high}}
+Suggested list price: {{suggested_price}}
+
+Rationale:
+- {{rationale_1}}
+- {{rationale_2}}
+- {{rationale_3}}
+
+This comparative market analysis is an estimate and not an appraisal.
+Equal Housing Opportunity.

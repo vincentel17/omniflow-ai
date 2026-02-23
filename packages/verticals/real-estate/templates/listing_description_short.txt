@@ -1,0 +1,10 @@
+{{property_address}} - {{beds}} BR / {{baths}} BA
+
+Highlights:
+- {{feature_1}}
+- {{feature_2}}
+- {{feature_3}}
+
+{{cta_line}}
+
+Equal Housing Opportunity.

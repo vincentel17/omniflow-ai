@@ -1,0 +1,16 @@
+Open House Plan - {{property_address}}
+
+Pre-event:
+- Publish event post 5 days before
+- Publish reminder post 1 day before
+- Confirm signage and printed property sheets
+
+During event:
+- Capture visitor contact details
+- Qualify buyer intent level
+- Log top objections and questions
+
+Post-event:
+- Send same-day follow-up to visitors
+- Route high-intent leads to priority outreach within 2 hours
+- Create nurture tasks for all qualified leads

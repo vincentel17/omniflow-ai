@@ -1,0 +1,16 @@
+Welcome to {{property_address}}, a {{beds}} bedroom, {{baths}} bathroom home offering {{sqft}} square feet of thoughtfully designed living space.
+
+Key features:
+- {{feature_1}}
+- {{feature_2}}
+- {{feature_3}}
+- {{feature_4}}
+
+Neighborhood benefits:
+- {{location_benefit_1}}
+- {{location_benefit_2}}
+
+Contact {{agent_name}} for a private tour and current pricing details.
+
+Equal Housing Opportunity.
+Information deemed reliable but not guaranteed.

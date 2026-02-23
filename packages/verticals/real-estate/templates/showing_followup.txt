@@ -1,0 +1,10 @@
+Subject: Great Meeting You at {{property_address}}
+
+Hi {{client_name}},
+
+Thanks for taking the time to tour {{property_address}}. I wanted to share a quick follow-up and answer any questions you have about condition, pricing, and next steps.
+
+If you want to move forward, I can prepare a draft offer strategy today.
+
+Best,
+{{agent_name}}
