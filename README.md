@@ -71,6 +71,29 @@ Run `make release-check` before release. It chains static checks, tests, e2e, bu
 
 See `docs/connectors.md` for architecture and extension guidance.
 
+## Phase 4 usage (Unified Inbox + Lead Engine, mock mode)
+
+1. Ingest a mock inbound thread:
+   - `POST /inbox/ingest/mock`
+2. Review inbox threads and messages:
+   - `GET /inbox/threads?limit=20&offset=0`
+   - `GET /inbox/threads/{id}/messages?limit=50&offset=0`
+3. Generate structured reply suggestion and save an outbound draft:
+   - `POST /inbox/threads/{id}/suggest-reply`
+   - `POST /inbox/threads/{id}/draft-reply`
+4. Convert thread to lead and run scoring/routing:
+   - `POST /leads/from-thread/{thread_id}`
+   - `POST /leads/{id}/score`
+   - `POST /leads/{id}/route`
+5. Suggest and apply nurture tasks:
+   - `POST /leads/{id}/nurture/suggest`
+   - `POST /leads/{id}/nurture/apply`
+6. Manage SLA response windows:
+   - `GET /sla/config`
+   - `POST /sla/config`
+7. Minimal UI pages:
+   - `/inbox`, `/leads`, `/settings/sla`
+
 ## Troubleshooting
 
 - If preflight fails on env vars, ensure `.env` includes all keys in `.env.schema.json`.

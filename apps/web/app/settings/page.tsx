@@ -11,6 +11,26 @@ export default function SettingsPage() {
           </Link>
         </li>
         <li>
+          <Link className="underline" href="/settings/brand">
+            Brand Profile
+          </Link>
+        </li>
+        <li>
+          <Link className="underline" href="/settings/sla">
+            SLA Settings
+          </Link>
+        </li>
+        <li>
+          <Link className="underline" href="/inbox">
+            Inbox
+          </Link>
+        </li>
+        <li>
+          <Link className="underline" href="/leads">
+            Leads
+          </Link>
+        </li>
+        <li>
           <Link className="underline" href="/events">
             Event Stream
           </Link>
