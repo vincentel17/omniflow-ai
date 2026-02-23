@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy import JSON as JsonType
@@ -12,6 +12,10 @@ from sqlalchemy.types import Uuid
 
 class Base(DeclarativeBase):
     pass
+
+
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [str(member.value) for member in enum_cls]
 
 
 class Role(str, enum.Enum):
@@ -27,6 +31,42 @@ class RiskTier(str, enum.Enum):
     TIER_2 = "TIER_2"
     TIER_3 = "TIER_3"
     TIER_4 = "TIER_4"
+
+
+class CampaignPlanStatus(str, enum.Enum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    ARCHIVED = "archived"
+
+
+class ContentItemStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PENDING_APPROVAL = "pending_approval"
+    APPROVED = "approved"
+    SCHEDULED = "scheduled"
+    PUBLISHING = "publishing"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+class ApprovalEntityType(str, enum.Enum):
+    CAMPAIGN_PLAN = "campaign_plan"
+    CONTENT_ITEM = "content_item"
+    PUBLISH_JOB = "publish_job"
+
+
+class ApprovalStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class PublishJobStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
 
 
 class IdMixin:
@@ -139,6 +179,226 @@ class AuditLog(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     target_type: Mapped[str] = mapped_column(String(100), nullable=False)
     target_id: Mapped[str] = mapped_column(String(255), nullable=False)
     risk_tier: Mapped[RiskTier] = mapped_column(
-        Enum(RiskTier, name="risk_tier_enum"), nullable=False, default=RiskTier.TIER_1
+        Enum(RiskTier, name="risk_tier_enum", values_callable=_enum_values),
+        nullable=False,
+        default=RiskTier.TIER_1,
     )
     metadata_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class ConnectorAccount(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "connector_accounts"
+    __table_args__ = (
+        UniqueConstraint("org_id", "provider", "account_ref", name="uq_connector_accounts_org_provider_ref"),
+        Index("ix_connector_accounts_org_id", "org_id"),
+        Index("ix_connector_accounts_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="linked")
+
+
+class OAuthToken(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "oauth_tokens"
+    __table_args__ = (
+        UniqueConstraint("org_id", "provider", "account_ref", name="uq_oauth_tokens_org_provider_ref"),
+        Index("ix_oauth_tokens_org_id", "org_id"),
+        Index("ix_oauth_tokens_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    access_token_enc: Mapped[str] = mapped_column(String(2048), nullable=False)
+    refresh_token_enc: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scopes_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ConnectorHealth(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "connector_health"
+    __table_args__ = (
+        UniqueConstraint("org_id", "provider", "account_ref", name="uq_connector_health_org_provider_ref"),
+        Index("ix_connector_health_org_id", "org_id"),
+        Index("ix_connector_health_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_msg: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(nullable=False, default=0)
+
+
+class ConnectorWorkflowRun(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "connector_workflow_runs"
+    __table_args__ = (
+        UniqueConstraint("org_id", "idempotency_key", name="uq_connector_workflow_runs_org_idempotency"),
+        Index("ix_connector_workflow_runs_org_id", "org_id"),
+        Index("ix_connector_workflow_runs_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    operation: Mapped[str] = mapped_column(String(100), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(nullable=False, default=3)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    payload_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    result_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ConnectorDeadLetter(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "connector_dead_letters"
+    __table_args__ = (
+        Index("ix_connector_dead_letters_org_id", "org_id"),
+        Index("ix_connector_dead_letters_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    operation: Mapped[str] = mapped_column(String(100), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    payload_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class CampaignPlan(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "campaign_plans"
+    __table_args__ = (
+        UniqueConstraint("org_id", "week_start_date", name="uq_campaign_plans_org_week"),
+        Index("ix_campaign_plans_org_id", "org_id"),
+        Index("ix_campaign_plans_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    vertical_pack_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    week_start_date: Mapped[date] = mapped_column(nullable=False)
+    status: Mapped[CampaignPlanStatus] = mapped_column(
+        Enum(CampaignPlanStatus, name="campaign_plan_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=CampaignPlanStatus.DRAFT,
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    plan_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class ContentItem(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "content_items"
+    __table_args__ = (
+        Index("ix_content_items_org_id", "org_id"),
+        Index("ix_content_items_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    campaign_plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("campaign_plans.id"), nullable=False)
+    channel: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[ContentItemStatus] = mapped_column(
+        Enum(ContentItemStatus, name="content_item_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=ContentItemStatus.DRAFT,
+    )
+    content_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    text_rendered: Mapped[str] = mapped_column(String(4000), nullable=False)
+    media_refs_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    link_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    tags_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    risk_tier: Mapped[RiskTier] = mapped_column(Enum(RiskTier, name="risk_tier_enum"), nullable=False)
+    policy_warnings_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+
+
+class Approval(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "approvals"
+    __table_args__ = (
+        Index("ix_approvals_org_id", "org_id"),
+        Index("ix_approvals_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    entity_type: Mapped[ApprovalEntityType] = mapped_column(
+        Enum(ApprovalEntityType, name="approval_entity_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    status: Mapped[ApprovalStatus] = mapped_column(
+        Enum(ApprovalStatus, name="approval_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=ApprovalStatus.PENDING,
+    )
+    requested_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class PublishJob(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "publish_jobs"
+    __table_args__ = (
+        UniqueConstraint("org_id", "idempotency_key", name="uq_publish_jobs_org_idempotency"),
+        UniqueConstraint("org_id", "content_item_id", name="uq_publish_jobs_org_content_item"),
+        Index("ix_publish_jobs_org_id", "org_id"),
+        Index("ix_publish_jobs_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    content_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("content_items.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    schedule_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[PublishJobStatus] = mapped_column(
+        Enum(PublishJobStatus, name="publish_job_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=PublishJobStatus.QUEUED,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    attempts: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BrandProfile(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "brand_profiles"
+    __table_args__ = (
+        UniqueConstraint("org_id", name="uq_brand_profiles_org_id"),
+        Index("ix_brand_profiles_org_id", "org_id"),
+        Index("ix_brand_profiles_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    brand_voice_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    brand_assets_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    locations_json: Mapped[list[dict[str, object]]] = mapped_column(JsonType, nullable=False, default=list)
+    auto_approve_tiers_max: Mapped[int] = mapped_column(nullable=False, default=1)
+    require_approval_for_publish: Mapped[bool] = mapped_column(nullable=False, default=True)
+
+
+class LinkTracking(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "link_tracking"
+    __table_args__ = (
+        UniqueConstraint("org_id", "short_code", name="uq_link_tracking_org_short_code"),
+        Index("ix_link_tracking_org_id", "org_id"),
+        Index("ix_link_tracking_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    short_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    destination_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    utm_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
