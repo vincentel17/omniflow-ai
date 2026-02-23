@@ -27,6 +27,11 @@ from packages.schemas.phase5 import (
     SEOPlanJSON,
     SEOServicePageJSON,
 )
+from packages.schemas.phase7 import (
+    CMAComparableInputJSON,
+    CMAPricingJSON,
+    ListingPackageJSON,
+)
 
 __all__ = [
     "ApprovalDecision",
@@ -52,4 +57,7 @@ __all__ = [
     "SEOFaqJSON",
     "SEOPlanJSON",
     "SEOServicePageJSON",
+    "CMAComparableInputJSON",
+    "CMAPricingJSON",
+    "ListingPackageJSON",
 ]

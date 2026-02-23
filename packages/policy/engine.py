@@ -41,7 +41,12 @@ class PolicyEngine:
         return ValidationResult(allowed=True, reasons=[])
 
     def risk_tier(self, action: str, context: dict[str, Any] | None = None) -> RiskTier:
-        del context
+        if context is not None:
+            content = str(context.get("content", ""))
+            prohibited_words = self.rules.get("content", {}).get("prohibited_words", [])
+            lower_content = content.lower()
+            if any(word.lower() in lower_content for word in prohibited_words):
+                return RiskTier.TIER_4
         override = self.rules.get("risk", {}).get("overrides", {}).get(action)
         if override is not None:
             return RiskTier(override)

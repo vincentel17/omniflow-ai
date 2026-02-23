@@ -37,3 +37,13 @@ def load_pack_file(pack_slug: str, filename: str) -> dict[str, Any]:
     if filename.endswith(".yaml"):
         return yaml.safe_load(target.read_text(encoding="utf-8")) or {}
     return json.loads(target.read_text(encoding="utf-8"))
+
+
+def load_pack_template(pack_slug: str, template_name: str) -> str:
+    pack_dir = _verticals_root() / pack_slug
+    if not pack_dir.exists():
+        raise FileNotFoundError(f"Unknown vertical pack: {pack_slug}")
+    target = pack_dir / "templates" / template_name
+    if not target.exists():
+        raise FileNotFoundError(f"Template not found: {template_name}")
+    return target.read_text(encoding="utf-8")

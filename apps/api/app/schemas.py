@@ -22,6 +22,14 @@ from .models import (
     PresenceTaskStatus,
     PresenceTaskType,
     PublishJobStatus,
+    REChecklistItemStatus,
+    RECommunicationChannel,
+    RECommunicationDirection,
+    RECMAComparableStatus,
+    REDealStatus,
+    REDealType,
+    REDocumentRequestStatus,
+    REListingPackageStatus,
     ReputationAudience,
     ReputationChannel,
     ReputationRequestCampaignStatus,
@@ -615,4 +623,159 @@ class ReputationCampaignResponse(BaseModel):
     audience: ReputationAudience
     template_key: str
     channel: ReputationChannel
+    created_at: datetime
+
+
+class REDealCreateRequest(BaseModel):
+    deal_type: REDealType
+    pipeline_stage: str = Field(default="lead", min_length=1, max_length=100)
+    lead_id: uuid.UUID | None = None
+    primary_contact_name: str | None = Field(default=None, max_length=255)
+    primary_contact_email: str | None = Field(default=None, max_length=320)
+    primary_contact_phone: str | None = Field(default=None, max_length=64)
+    property_address_json: dict[str, object] = Field(default_factory=dict)
+    important_dates_json: dict[str, object] = Field(default_factory=dict)
+
+
+class REDealUpdateRequest(BaseModel):
+    status: REDealStatus | None = None
+    pipeline_stage: str | None = Field(default=None, min_length=1, max_length=100)
+    property_address_json: dict[str, object] | None = None
+    important_dates_json: dict[str, object] | None = None
+
+
+class REDealResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    deal_type: REDealType
+    status: REDealStatus
+    pipeline_stage: str
+    lead_id: uuid.UUID | None
+    primary_contact_name: str | None
+    primary_contact_email: str | None
+    primary_contact_phone: str | None
+    property_address_json: dict[str, object]
+    important_dates_json: dict[str, object]
+    created_at: datetime
+    updated_at: datetime
+
+
+class REChecklistApplyTemplateRequest(BaseModel):
+    template_name: str = Field(min_length=1, max_length=255)
+    state_code: str | None = Field(default=None, max_length=10)
+
+
+class REChecklistItemResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    deal_id: uuid.UUID
+    title: str
+    description: str | None
+    due_at: datetime | None
+    status: REChecklistItemStatus
+    assigned_to_user_id: uuid.UUID | None
+    source_template_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class REDocumentRequestCreateRequest(BaseModel):
+    doc_type: str = Field(min_length=1, max_length=100)
+    requested_from: str = Field(min_length=1, max_length=100)
+
+
+class REDocumentRequestResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    deal_id: uuid.UUID
+    doc_type: str
+    requested_from: str
+    status: REDocumentRequestStatus
+    file_ref: str | None
+    created_at: datetime
+
+
+class RECommunicationLogCreateRequest(BaseModel):
+    channel: RECommunicationChannel
+    direction: RECommunicationDirection
+    subject: str | None = Field(default=None, max_length=255)
+    body_text: str = Field(min_length=1, max_length=8000)
+    thread_id: uuid.UUID | None = None
+
+
+class RECommunicationLogResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    deal_id: uuid.UUID
+    thread_id: uuid.UUID | None
+    channel: RECommunicationChannel
+    direction: RECommunicationDirection
+    subject: str | None
+    body_text: str
+    created_by_user_id: uuid.UUID | None
+    created_at: datetime
+
+
+class RECMAReportCreateRequest(BaseModel):
+    lead_id: uuid.UUID | None = None
+    deal_id: uuid.UUID | None = None
+    subject_property_json: dict[str, object] = Field(default_factory=dict)
+
+
+class RECMAComparableInput(BaseModel):
+    address: str = Field(min_length=1, max_length=500)
+    status: RECMAComparableStatus
+    sold_price: int | None = Field(default=None, ge=0)
+    list_price: int | None = Field(default=None, ge=0)
+    beds: float | None = Field(default=None, ge=0)
+    baths: float | None = Field(default=None, ge=0)
+    sqft: int | None = Field(default=None, ge=0)
+    year_built: int | None = Field(default=None, ge=0)
+    days_on_market: int | None = Field(default=None, ge=0)
+    distance_miles: float | None = Field(default=None, ge=0)
+    adjustments_json: dict[str, object] = Field(default_factory=dict)
+
+
+class RECMACompsImportRequest(BaseModel):
+    comparables: list[RECMAComparableInput] = Field(default_factory=list, max_length=200)
+
+
+class RECMAComparableResponse(RECMAComparableInput):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    cma_report_id: uuid.UUID
+    created_at: datetime
+
+
+class RECMAReportResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    lead_id: uuid.UUID | None
+    deal_id: uuid.UUID | None
+    subject_property_json: dict[str, object]
+    pricing_json: dict[str, object]
+    narrative_text: str | None
+    risk_tier: RiskTier
+    policy_warnings_json: list[str]
+    created_at: datetime
+
+
+class REListingPackageCreateRequest(BaseModel):
+    deal_id: uuid.UUID | None = None
+    property_address_json: dict[str, object] = Field(default_factory=dict)
+    key_features_json: list[str] = Field(default_factory=list)
+
+
+class REListingPackageResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    deal_id: uuid.UUID | None
+    property_address_json: dict[str, object]
+    status: REListingPackageStatus
+    description_variants_json: dict[str, object]
+    key_features_json: list[str]
+    open_house_plan_json: dict[str, object]
+    social_campaign_pack_json: dict[str, object]
+    risk_tier: RiskTier
+    policy_warnings_json: list[str]
     created_at: datetime

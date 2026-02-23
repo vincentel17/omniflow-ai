@@ -16,6 +16,7 @@ from .routers.orgs import router as org_router
 from .routers.presence import router as presence_router
 from .routers.publish import router as publish_router
 from .routers.reputation import router as reputation_router
+from .routers.real_estate import router as real_estate_router
 from .routers.seo import router as seo_router
 from .routers.verticals import router as vertical_router
 
@@ -38,3 +39,4 @@ app.include_router(sla_router)
 app.include_router(presence_router)
 app.include_router(seo_router)
 app.include_router(reputation_router)
+app.include_router(real_estate_router)

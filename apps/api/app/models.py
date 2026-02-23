@@ -183,6 +183,54 @@ class ReputationChannel(str, enum.Enum):
     SMS = "sms"
 
 
+class REDealType(str, enum.Enum):
+    BUYER = "buyer"
+    SELLER = "seller"
+    LISTING = "listing"
+    LEASE = "lease"
+
+
+class REDealStatus(str, enum.Enum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class REChecklistItemStatus(str, enum.Enum):
+    OPEN = "open"
+    DONE = "done"
+    CANCELED = "canceled"
+
+
+class REDocumentRequestStatus(str, enum.Enum):
+    REQUESTED = "requested"
+    RECEIVED = "received"
+    VERIFIED = "verified"
+
+
+class RECommunicationChannel(str, enum.Enum):
+    EMAIL = "email"
+    SMS = "sms"
+    CALL = "call"
+    NOTE = "note"
+
+
+class RECommunicationDirection(str, enum.Enum):
+    OUTBOUND = "outbound"
+    INBOUND = "inbound"
+
+
+class RECMAComparableStatus(str, enum.Enum):
+    SOLD = "sold"
+    ACTIVE = "active"
+    PENDING = "pending"
+
+
+class REListingPackageStatus(str, enum.Enum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    PUBLISHED = "published"
+
+
 class IdMixin:
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
@@ -879,3 +927,189 @@ class ReputationRequestCampaign(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
         Enum(ReputationChannel, name="reputation_channel_enum", values_callable=_enum_values),
         nullable=False,
     )
+
+
+class REDeal(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_deals"
+    __table_args__ = (
+        Index("ix_re_deals_org_id", "org_id"),
+        Index("ix_re_deals_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    deal_type: Mapped[REDealType] = mapped_column(
+        Enum(REDealType, name="re_deal_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    status: Mapped[REDealStatus] = mapped_column(
+        Enum(REDealStatus, name="re_deal_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=REDealStatus.ACTIVE,
+    )
+    pipeline_stage: Mapped[str] = mapped_column(String(100), nullable=False, default="lead")
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("leads.id"), nullable=True)
+    primary_contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    primary_contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    primary_contact_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    property_address_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    important_dates_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class REChecklistTemplate(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_checklist_templates"
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "name",
+            "deal_type",
+            "state_code",
+            name="uq_re_checklist_templates_org_name_type_state",
+        ),
+        Index("ix_re_checklist_templates_org_id", "org_id"),
+        Index("ix_re_checklist_templates_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    deal_type: Mapped[REDealType] = mapped_column(
+        Enum(REDealType, name="re_checklist_template_deal_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    state_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    items_json: Mapped[list[dict[str, object]]] = mapped_column(JsonType, nullable=False, default=list)
+
+
+class REChecklistItem(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_checklist_items"
+    __table_args__ = (
+        Index("ix_re_checklist_items_org_id", "org_id"),
+        Index("ix_re_checklist_items_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("re_deals.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[REChecklistItemStatus] = mapped_column(
+        Enum(REChecklistItemStatus, name="re_checklist_item_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=REChecklistItemStatus.OPEN,
+    )
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    source_template_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("re_checklist_templates.id"), nullable=True)
+
+
+class REDocumentRequest(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_document_requests"
+    __table_args__ = (
+        Index("ix_re_document_requests_org_id", "org_id"),
+        Index("ix_re_document_requests_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("re_deals.id"), nullable=False)
+    doc_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    requested_from: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[REDocumentRequestStatus] = mapped_column(
+        Enum(REDocumentRequestStatus, name="re_document_request_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=REDocumentRequestStatus.REQUESTED,
+    )
+    file_ref: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+
+
+class RECommunicationLog(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_communication_logs"
+    __table_args__ = (
+        Index("ix_re_communication_logs_org_id", "org_id"),
+        Index("ix_re_communication_logs_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("re_deals.id"), nullable=False)
+    thread_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("inbox_threads.id"), nullable=True)
+    channel: Mapped[RECommunicationChannel] = mapped_column(
+        Enum(RECommunicationChannel, name="re_communication_channel_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    direction: Mapped[RECommunicationDirection] = mapped_column(
+        Enum(RECommunicationDirection, name="re_communication_direction_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    body_text: Mapped[str] = mapped_column(String(8000), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class RECMAReport(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_cma_reports"
+    __table_args__ = (
+        Index("ix_re_cma_reports_org_id", "org_id"),
+        Index("ix_re_cma_reports_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("leads.id"), nullable=True)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("re_deals.id"), nullable=True)
+    subject_property_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    pricing_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    narrative_text: Mapped[str | None] = mapped_column(String(32000), nullable=True)
+    risk_tier: Mapped[RiskTier] = mapped_column(
+        Enum(RiskTier, name="risk_tier_enum", values_callable=_enum_values),
+        nullable=False,
+        default=RiskTier.TIER_1,
+    )
+    policy_warnings_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+
+
+class RECMAComparable(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_cma_comparables"
+    __table_args__ = (
+        Index("ix_re_cma_comparables_org_id", "org_id"),
+        Index("ix_re_cma_comparables_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    cma_report_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("re_cma_reports.id"), nullable=False)
+    address: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[RECMAComparableStatus] = mapped_column(
+        Enum(RECMAComparableStatus, name="re_cma_comparable_status_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    sold_price: Mapped[int | None] = mapped_column(nullable=True)
+    list_price: Mapped[int | None] = mapped_column(nullable=True)
+    beds: Mapped[float | None] = mapped_column(nullable=True)
+    baths: Mapped[float | None] = mapped_column(nullable=True)
+    sqft: Mapped[int | None] = mapped_column(nullable=True)
+    year_built: Mapped[int | None] = mapped_column(nullable=True)
+    days_on_market: Mapped[int | None] = mapped_column(nullable=True)
+    distance_miles: Mapped[float | None] = mapped_column(nullable=True)
+    adjustments_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class REListingPackage(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "re_listing_packages"
+    __table_args__ = (
+        Index("ix_re_listing_packages_org_id", "org_id"),
+        Index("ix_re_listing_packages_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("re_deals.id"), nullable=True)
+    property_address_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    status: Mapped[REListingPackageStatus] = mapped_column(
+        Enum(REListingPackageStatus, name="re_listing_package_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=REListingPackageStatus.DRAFT,
+    )
+    description_variants_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    key_features_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    open_house_plan_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    social_campaign_pack_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    risk_tier: Mapped[RiskTier] = mapped_column(
+        Enum(RiskTier, name="risk_tier_enum", values_callable=_enum_values),
+        nullable=False,
+        default=RiskTier.TIER_1,
+    )
+    policy_warnings_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
