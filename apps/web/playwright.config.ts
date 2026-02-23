@@ -7,12 +7,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   testDir: "./tests/e2e",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000"
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100"
   },
   webServer: {
-    command: "pnpm dev",
-    port: 3000,
-    reuseExistingServer: true,
+    command: "pnpm exec next dev --port 3100",
+    port: 3100,
+    reuseExistingServer: false,
     cwd: __dirname
   }
 });
