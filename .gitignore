@@ -6,3 +6,9 @@ build/
 coverage/
 *.log
 .env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.tsbuildinfo
+.DS_Store
