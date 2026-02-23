@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "factors": [
+    {
+      "name": "showing_request",
+      "weight": 2.0
+    }
+  ]
+}
+

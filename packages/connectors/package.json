@@ -1,0 +1,19 @@
+{
+  "name": "@omniflow/connectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "22.8.6",
+    "@typescript-eslint/eslint-plugin": "8.12.2",
+    "@typescript-eslint/parser": "8.12.2",
+    "eslint": "8.57.1",
+    "typescript": "5.6.3",
+    "vitest": "2.1.4"
+  }
+}

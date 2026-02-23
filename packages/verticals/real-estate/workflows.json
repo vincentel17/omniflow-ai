@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "id": "open-house-followup",
+      "trigger": "open_house_completed",
+      "actions": ["send_followup_template"]
+    }
+  ]
+}
+

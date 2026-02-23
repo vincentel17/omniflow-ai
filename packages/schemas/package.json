@@ -1,0 +1,8 @@
+{
+  "name": "@omniflow/schemas",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "node -e \"console.log('schemas build placeholder')\""
+  }
+}

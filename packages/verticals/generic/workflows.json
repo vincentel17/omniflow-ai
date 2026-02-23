@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "id": "generic-lead-followup",
+      "trigger": "lead_created",
+      "actions": ["notify_owner"]
+    }
+  ]
+}
+

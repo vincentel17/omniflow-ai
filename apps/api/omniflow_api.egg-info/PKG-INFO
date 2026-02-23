@@ -1,0 +1,28 @@
+Metadata-Version: 2.1
+Name: omniflow-api
+Version: 0.1.0
+Requires-Python: <3.13,>=3.12
+Requires-Dist: fastapi==0.131.0
+Requires-Dist: starlette==0.49.1
+Requires-Dist: uvicorn==0.32.0
+Requires-Dist: pydantic==2.9.2
+Requires-Dist: pydantic-settings==2.6.0
+Requires-Dist: sqlalchemy==2.0.36
+Requires-Dist: psycopg[binary]==3.2.3
+Requires-Dist: alembic==1.13.3
+Requires-Dist: redis==5.2.0
+Requires-Dist: celery==5.4.0
+Requires-Dist: pyyaml==6.0.2
+Requires-Dist: python-json-logger==2.0.7
+Requires-Dist: opentelemetry-api==1.28.2
+Requires-Dist: opentelemetry-sdk==1.28.2
+Requires-Dist: sentry-sdk==2.17.0
+Provides-Extra: dev
+Requires-Dist: pytest==8.3.3; extra == "dev"
+Requires-Dist: pytest-asyncio==0.24.0; extra == "dev"
+Requires-Dist: httpx==0.27.2; extra == "dev"
+Requires-Dist: ruff==0.7.1; extra == "dev"
+Requires-Dist: mypy==1.12.1; extra == "dev"
+Requires-Dist: types-redis==4.6.0.20241004; extra == "dev"
+Requires-Dist: types-PyYAML==6.0.12.20240917; extra == "dev"
+Requires-Dist: pip-audit==2.7.3; extra == "dev"

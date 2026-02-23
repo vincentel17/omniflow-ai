@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "factors": [
+    {
+      "name": "engagement_signal",
+      "weight": 1.0
+    }
+  ]
+}
+

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "pipelines": [
+    {
+      "id": "real-estate-listing-pipeline",
+      "steps": ["intake", "draft_listing", "review", "publish"]
+    }
+  ]
+}
+

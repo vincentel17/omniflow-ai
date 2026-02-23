@@ -1,0 +1,11 @@
+content:
+  prohibited_words:
+    - "whites only"
+    - "no children"
+actions:
+  blocked:
+    - "auto_send_contract"
+risk:
+  overrides:
+    publish_listing: TIER_2
+    auto_send_contract: TIER_4

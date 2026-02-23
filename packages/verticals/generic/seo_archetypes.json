@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "archetypes": [
+    {
+      "slug": "service-page",
+      "intent": "transactional"
+    }
+  ]
+}
+

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "pipelines": [
+    {
+      "id": "generic-content-pipeline",
+      "steps": ["plan", "draft", "review", "publish"]
+    }
+  ]
+}
+

@@ -1,0 +1,28 @@
+{
+  "name": "omniflow-ai",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.2",
+  "engines": {
+    "node": "20.18.0",
+    "pnpm": "9.12.2"
+  },
+  "scripts": {
+    "setup": "pnpm install --frozen-lockfile && python -m pip install --upgrade pip && pip install -e apps/api[dev] -e apps/worker[dev]",
+    "check": "pnpm run check:structure && pnpm run lint && pnpm run typecheck",
+    "check:structure": "powershell -ExecutionPolicy Bypass -File ./scripts/validate-structure.ps1",
+    "lint": "pnpm --filter @omniflow/web lint && pnpm --filter @omniflow/connectors lint && python -m ruff check apps/api apps/worker",
+    "typecheck": "pnpm --filter @omniflow/web typecheck && pnpm --filter @omniflow/connectors typecheck && python -m mypy --ignore-missing-imports apps/api/app apps/worker/omniflow_worker",
+    "test": "pnpm run test-unit && pnpm run test-integration && pnpm run test-contract",
+    "test-unit": "pnpm --filter @omniflow/web test:unit && python -m pytest apps/api/tests apps/worker/tests -m \"not integration\" --rootdir .",
+    "test-integration": "python -m pytest apps/api/tests -m integration",
+    "test-contract": "pnpm --filter @omniflow/connectors test",
+    "test-e2e": "pnpm --filter @omniflow/web e2e:install && pnpm --filter @omniflow/web test:e2e",
+    "build": "pnpm --filter @omniflow/schemas build && pnpm --filter @omniflow/web build",
+    "migrate": "python -m alembic -c apps/api/alembic.ini upgrade head",
+    "seed": "python -m app.seed",
+    "security:deps": "pnpm audit --prod && python -m pip_audit -r apps/api/requirements.audit.txt --no-deps && python -m pip_audit -r apps/worker/requirements.audit.txt --no-deps",
+    "security:sast": "node ./scripts/run-semgrep.mjs",
+    "release-check": "pnpm run check && pnpm run test && pnpm run test-e2e && pnpm run build && pnpm run security:deps && pnpm run security:sast"
+  }
+}
