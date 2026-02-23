@@ -53,3 +53,32 @@ def test_reputation_sla_tick_handles_no_reviews(monkeypatch) -> None:
 
     monkeypatch.setattr(worker_main, "SessionLocal", lambda: _DummySession())
     assert worker_main.reputation_sla_tick() == 0
+
+
+def test_scheduler_tick_skips_when_auto_posting_disabled(monkeypatch) -> None:
+    job = SimpleNamespace(id=uuid.uuid4(), org_id=uuid.uuid4())
+
+    class _DummySession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def scalars(self, stmt):  # noqa: ANN001
+            return SimpleNamespace(all=lambda: [job])
+
+    class _DelayCounter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def delay(self, _value: str) -> None:
+            self.calls += 1
+
+    delay_counter = _DelayCounter()
+    monkeypatch.setattr(worker_main, "SessionLocal", lambda: _DummySession())
+    monkeypatch.setattr(worker_main, "_org_feature_enabled", lambda db, org_id, key, fallback: False)
+    monkeypatch.setattr(worker_main.publish_job_execute, "delay", delay_counter.delay)
+
+    assert worker_main.scheduler_tick() == 0
+    assert delay_counter.calls == 0

@@ -10,6 +10,7 @@ from app.db import SessionLocal
 from app.models import (
     AuditLog,
     ConnectorAccount,
+    ConnectorHealth,
     ContentItem,
     ContentItemStatus,
     Event,
@@ -21,6 +22,7 @@ from app.models import (
     NurtureTaskStatus,
     NurtureTaskType,
     Org,
+    OrgSettings,
     PresenceAuditRun,
     PresenceAuditRunStatus,
     PresenceTask,
@@ -44,6 +46,57 @@ def _now() -> datetime:
 def _publish_mock(provider: str, account_ref: str, content: ContentItem) -> str:
     suffix = str(content.id).split("-")[0]
     return f"mock-{provider}-{account_ref}-{suffix}"
+
+
+def _org_settings_payload(db: Session, org_id: uuid.UUID) -> dict[str, object]:
+    row = db.scalar(select(OrgSettings).where(OrgSettings.org_id == org_id, OrgSettings.deleted_at.is_(None)))
+    if row is None or not isinstance(row.settings_json, dict):
+        return {}
+    return row.settings_json
+
+
+def _org_feature_enabled(db: Session, org_id: uuid.UUID, key: str, fallback: bool) -> bool:
+    payload = _org_settings_payload(db=db, org_id=org_id)
+    raw = payload.get(key)
+    return raw if isinstance(raw, bool) else fallback
+
+
+def _org_connector_mode(db: Session, org_id: uuid.UUID) -> str:
+    payload = _org_settings_payload(db=db, org_id=org_id)
+    raw = payload.get("connector_mode")
+    if isinstance(raw, str) and raw in {"mock", "live"}:
+        return raw
+    return os.getenv("CONNECTOR_MODE", "mock")
+
+
+def _record_connector_failure(db: Session, org_id: uuid.UUID, provider: str, account_ref: str, error_message: str) -> None:
+    health = db.scalar(
+        select(ConnectorHealth).where(
+            ConnectorHealth.org_id == org_id,
+            ConnectorHealth.provider == provider,
+            ConnectorHealth.account_ref == account_ref,
+            ConnectorHealth.deleted_at.is_(None),
+        )
+    )
+    if health is None:
+        health = ConnectorHealth(org_id=org_id, provider=provider, account_ref=account_ref, consecutive_failures=0)
+        db.add(health)
+    health.consecutive_failures = int(health.consecutive_failures or 0) + 1
+    health.last_error_at = _now()
+    health.last_error_msg = error_message[:500]
+
+    threshold = int(os.getenv("CONNECTOR_CIRCUIT_BREAKER_THRESHOLD", "3"))
+    if health.consecutive_failures >= threshold:
+        account = db.scalar(
+            select(ConnectorAccount).where(
+                ConnectorAccount.org_id == org_id,
+                ConnectorAccount.provider == provider,
+                ConnectorAccount.account_ref == account_ref,
+                ConnectorAccount.deleted_at.is_(None),
+            )
+        )
+        if account is not None:
+            account.status = "circuit_open"
 
 
 def _write_system_event(
@@ -103,6 +156,11 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
             return "already_succeeded"
         if job.status == PublishJobStatus.CANCELED:
             return "canceled"
+        if not _org_feature_enabled(db=db, org_id=job.org_id, key="enable_auto_posting", fallback=False):
+            job.status = PublishJobStatus.CANCELED
+            job.last_error = "auto posting disabled by org ops settings"
+            db.commit()
+            return "auto_posting_disabled"
 
         content = db.scalar(
             select(ContentItem).where(
@@ -133,7 +191,7 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
         )
 
         try:
-            connector_mode = os.getenv("CONNECTOR_MODE", "mock")
+            connector_mode = _org_connector_mode(db=db, org_id=job.org_id)
             if connector_mode != "mock":
                 raise NotImplementedError("live connector publish is not implemented")
             external_id = _publish_mock(provider=job.provider, account_ref=job.account_ref, content=content)
@@ -164,6 +222,13 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
             return "succeeded"
         except Exception as exc:  # pragma: no cover - retry path
             job.last_error = str(exc)[:500]
+            _record_connector_failure(
+                db=db,
+                org_id=job.org_id,
+                provider=job.provider,
+                account_ref=job.account_ref,
+                error_message=job.last_error,
+            )
             if job.attempts >= 3:
                 job.status = PublishJobStatus.FAILED
                 content.status = ContentItemStatus.FAILED
@@ -203,6 +268,8 @@ def scheduler_tick() -> int:
             )
         ).all()
         for row in rows:
+            if not _org_feature_enabled(db=db, org_id=row.org_id, key="enable_auto_posting", fallback=False):
+                continue
             publish_job_execute.delay(str(row.id))
             enqueued += 1
     return enqueued
@@ -301,6 +368,8 @@ def presence_audit_tick() -> int:
     with SessionLocal() as db:
         orgs = db.scalars(select(Org).where(Org.deleted_at.is_(None))).all()
         for org in orgs:
+            if not _org_feature_enabled(db=db, org_id=org.id, key="enable_scheduled_audits", fallback=True):
+                continue
             has_connector = db.scalar(
                 select(ConnectorAccount.id).where(
                     ConnectorAccount.org_id == org.id,

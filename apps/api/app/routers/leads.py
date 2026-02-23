@@ -34,6 +34,7 @@ from ..schemas import (
 )
 from ..services.audit import write_audit_log
 from ..services.events import write_event
+from ..services.org_settings import assert_feature_enabled
 from ..services.phase4 import (
     build_nurture_plan,
     choose_round_robin_assignee,
@@ -317,6 +318,12 @@ def route_lead(
     context: RequestContext = Depends(get_request_context),
 ) -> LeadAssignmentResponse:
     lead = _lead_with_scope(db=db, context=context, lead_id=lead_id)
+    assert_feature_enabled(
+        db=db,
+        org_id=context.current_org_id,
+        feature_key="enable_auto_lead_routing",
+        detail="auto lead routing is disabled by org ops settings",
+    )
 
     if rule == "round_robin":
         assigned_to, rationale = choose_round_robin_assignee(db=db, org_id=context.current_org_id)
@@ -422,6 +429,12 @@ def apply_nurture(
     context: RequestContext = Depends(get_request_context),
 ) -> list[NurtureTaskResponse]:
     lead = _lead_with_scope(db=db, context=context, lead_id=lead_id)
+    assert_feature_enabled(
+        db=db,
+        org_id=context.current_org_id,
+        feature_key="enable_auto_nurture_apply",
+        detail="auto nurture apply is disabled by org ops settings",
+    )
     created: list[NurtureTask] = []
     for task in payload.tasks:
         row = NurtureTask(

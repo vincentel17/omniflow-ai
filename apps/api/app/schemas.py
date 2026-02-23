@@ -38,6 +38,7 @@ from .models import (
     Role,
     SEOWorkItemStatus,
     SEOWorkItemType,
+    OnboardingSessionStatus,
 )
 
 
@@ -474,6 +475,47 @@ class SLAConfigResponse(BaseModel):
     escalation_minutes: int
     notify_channels_json: list[str]
     created_at: datetime
+
+
+class OpsSettingsResponse(BaseModel):
+    enable_auto_posting: bool = False
+    enable_auto_reply: bool = False
+    enable_auto_lead_routing: bool = True
+    enable_auto_nurture_apply: bool = False
+    enable_scheduled_audits: bool = True
+    enable_seo_generation: bool = True
+    enable_review_response_drafts: bool = True
+    connector_mode: str = Field(default="mock", pattern="^(mock|live)$")
+    ai_mode: str = Field(default="mock", pattern="^(mock|live)$")
+    max_auto_approve_tier: int = Field(default=1, ge=0, le=4)
+    automation_weights: dict[str, int] = Field(default_factory=dict)
+
+
+class OpsSettingsPatchRequest(BaseModel):
+    enable_auto_posting: bool | None = None
+    enable_auto_reply: bool | None = None
+    enable_auto_lead_routing: bool | None = None
+    enable_auto_nurture_apply: bool | None = None
+    enable_scheduled_audits: bool | None = None
+    enable_seo_generation: bool | None = None
+    enable_review_response_drafts: bool | None = None
+    connector_mode: str | None = Field(default=None, pattern="^(mock|live)$")
+    ai_mode: str | None = Field(default=None, pattern="^(mock|live)$")
+    max_auto_approve_tier: int | None = Field(default=None, ge=0, le=4)
+    automation_weights: dict[str, int] | None = None
+
+
+class OnboardingSessionResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    status: OnboardingSessionStatus
+    steps_json: dict[str, object]
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class OnboardingStepCompleteRequest(BaseModel):
+    completed: bool = True
 
 
 class PresenceAuditRunRequest(BaseModel):

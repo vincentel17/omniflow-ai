@@ -29,6 +29,7 @@ from ..schemas import (
 from ..services.ai import generate_campaign_plan, generate_content_items
 from ..services.audit import write_audit_log
 from ..services.events import write_event
+from ..services.org_settings import ai_mode_for_org
 from ..services.phase3 import get_brand_profile, get_vertical_pack_slug, should_auto_approve, utcnow
 from ..services.policy import load_policy_engine
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
@@ -59,6 +60,9 @@ def create_campaign_plan(
     context: RequestContext = Depends(get_request_context),
 ) -> CampaignPlanResponse:
     require_role(context, Role.AGENT)
+    org_ai_mode = ai_mode_for_org(db=db, org_id=context.current_org_id)
+    if org_ai_mode == "live" and context.current_role not in (Role.ADMIN, Role.OWNER):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="live AI mode requires admin or owner role")
     pack_slug = get_vertical_pack_slug(db=db, org_id=context.current_org_id, preferred_slug=payload.vertical_pack_slug)
     plan_json = generate_campaign_plan(
         week_start_date=payload.week_start_date,
@@ -188,6 +192,9 @@ def generate_campaign_content(
     context: RequestContext = Depends(get_request_context),
 ) -> CampaignPlanGenerateContentResponse:
     require_role(context, Role.AGENT)
+    org_ai_mode = ai_mode_for_org(db=db, org_id=context.current_org_id)
+    if org_ai_mode == "live" and context.current_role not in (Role.ADMIN, Role.OWNER):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="live AI mode requires admin or owner role")
     campaign = db.scalar(
         org_scoped(
             select(CampaignPlan).where(CampaignPlan.id == campaign_id, CampaignPlan.deleted_at.is_(None)),

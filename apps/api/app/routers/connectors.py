@@ -23,6 +23,7 @@ from ..services.audit import write_audit_log
 from ..services.connector_manager import verify_connector_health
 from ..services.events import write_event
 from ..services.oauth_state import consume_oauth_state, create_oauth_state
+from ..services.org_settings import connector_mode_for_org
 from ..services.token_vault import store_tokens
 from ..settings import settings
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
@@ -43,11 +44,16 @@ def _provider_is_configured(provider: str) -> bool:
 
 
 @router.get("/providers", response_model=list[ConnectorProviderResponse])
-def list_providers() -> list[ConnectorProviderResponse]:
+def list_providers(
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> list[ConnectorProviderResponse]:
+    require_role(context, Role.MEMBER)
+    mode = connector_mode_for_org(db, context.current_org_id)
     return [
         ConnectorProviderResponse(
             provider=provider,
-            mode=settings.connector_mode,
+            mode=mode,
             configured=_provider_is_configured(provider),
         )
         for provider in SUPPORTED_PROVIDERS
@@ -58,14 +64,16 @@ def list_providers() -> list[ConnectorProviderResponse]:
 def start_oauth(
     provider: str,
     payload: ConnectorStartRequest,
+    db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
 ) -> ConnectorStartResponse:
+    del payload
     require_role(context, Role.ADMIN)
     if provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
 
     state = create_oauth_state(get_redis_client(), context.current_org_id, provider)
-    if settings.connector_mode == "mock":
+    if connector_mode_for_org(db, context.current_org_id) == "mock":
         params = urlencode({"state": state, "code": "mock-code"})
         auth_url = f"{settings.oauth_redirect_uri}?{params}"
     else:
@@ -122,7 +130,7 @@ def oauth_callback(
 
     access_token = f"mock-access-{provider}-{payload.account_ref}"
     refresh_token = f"mock-refresh-{provider}-{payload.account_ref}"
-    if settings.connector_mode != "mock":
+    if connector_mode_for_org(db, context.current_org_id) != "mock":
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="live oauth exchange not implemented")
 
     store_tokens(
@@ -283,6 +291,80 @@ def disconnect_account(
         display_name=row.display_name,
         status=row.status,
         created_at=row.created_at,
+    )
+
+
+@router.post("/{provider}/{account_ref}/reenable", response_model=ConnectorHealthResponse)
+def reenable_connector(
+    provider: str,
+    account_ref: str,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ConnectorHealthResponse:
+    require_role(context, Role.ADMIN)
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+    health = db.scalar(
+        org_scoped(
+            select(ConnectorHealth).where(
+                ConnectorHealth.provider == provider,
+                ConnectorHealth.account_ref == account_ref,
+                ConnectorHealth.deleted_at.is_(None),
+            ),
+            context.current_org_id,
+            ConnectorHealth,
+        )
+    )
+    if health is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="connector health not found")
+
+    health.consecutive_failures = 0
+    health.last_error_at = None
+    health.last_error_msg = None
+
+    account = db.scalar(
+        org_scoped(
+            select(ConnectorAccount).where(
+                ConnectorAccount.provider == provider,
+                ConnectorAccount.account_ref == account_ref,
+                ConnectorAccount.deleted_at.is_(None),
+            ),
+            context.current_org_id,
+            ConnectorAccount,
+        )
+    )
+    if account is not None and account.status != "linked":
+        account.status = "linked"
+
+    write_audit_log(
+        db=db,
+        context=context,
+        action="connector.reenabled",
+        target_type="connector_health",
+        target_id=str(health.id),
+        metadata_json={"provider": provider, "account_ref": account_ref},
+    )
+    write_event(
+        db=db,
+        org_id=context.current_org_id,
+        source="connectors",
+        channel=provider,
+        event_type="CONNECTOR_REENABLED",
+        payload_json={"provider": provider, "account_ref": account_ref},
+        actor_id=str(context.current_user_id),
+    )
+    db.commit()
+    db.refresh(health)
+    return ConnectorHealthResponse(
+        id=health.id,
+        org_id=health.org_id,
+        provider=health.provider,
+        account_ref=health.account_ref,
+        last_ok_at=health.last_ok_at,
+        last_error_at=health.last_error_at,
+        last_error_msg=health.last_error_msg,
+        consecutive_failures=health.consecutive_failures,
     )
 
 

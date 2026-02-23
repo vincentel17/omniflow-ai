@@ -1,4 +1,8 @@
+import uuid
+
 from fastapi import FastAPI
+from starlette.requests import Request
+from starlette.responses import Response
 
 from .routers.audit import router as audit_router
 from .routers.analytics import router as analytics_router
@@ -13,6 +17,8 @@ from .routers.links import router as links_router
 from .routers.leads import router as leads_router
 from .routers.leads import sla_router
 from .routers.orgs import router as org_router
+from .routers.ops import router as ops_router
+from .routers.onboarding import router as onboarding_router
 from .routers.presence import router as presence_router
 from .routers.publish import router as publish_router
 from .routers.reputation import router as reputation_router
@@ -21,8 +27,21 @@ from .routers.seo import router as seo_router
 from .routers.verticals import router as vertical_router
 
 app = FastAPI(title="OmniFlow API", version="0.1.0")
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next) -> Response:  # type: ignore[override]
+    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = request_id
+    return response
+
+
 app.include_router(health_router)
 app.include_router(org_router)
+app.include_router(ops_router)
+app.include_router(onboarding_router)
 app.include_router(vertical_router)
 app.include_router(events_router)
 app.include_router(audit_router)

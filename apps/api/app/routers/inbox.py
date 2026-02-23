@@ -25,6 +25,7 @@ from ..services.events import write_event
 from ..services.phase3 import get_vertical_pack_slug, utcnow
 from ..services.phase4 import build_mock_reply_suggestion
 from ..services.policy import load_policy_engine
+from ..services.rate_limit import enforce_org_rate_limit
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
 
 router = APIRouter(prefix="/inbox", tags=["inbox"])
@@ -313,6 +314,7 @@ def suggest_reply(
     context: RequestContext = Depends(get_request_context),
 ) -> ReplySuggestionResponse:
     require_role(context, Role.AGENT)
+    enforce_org_rate_limit(org_id=context.current_org_id, bucket_name="reply_suggestions", max_requests=60, window_seconds=60)
     thread = db.scalar(
         org_scoped(
             select(InboxThread).where(InboxThread.id == thread_id, InboxThread.deleted_at.is_(None)),
@@ -420,3 +422,6 @@ def draft_reply(
     db.commit()
     db.refresh(draft)
     return _serialize_message(draft)
+
+
+

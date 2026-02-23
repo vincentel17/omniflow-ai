@@ -11,6 +11,7 @@ from ..models import ContentItem, ContentItemStatus, PublishJob, PublishJobStatu
 from ..schemas import PublishJobCreateRequest, PublishJobResponse
 from ..services.audit import write_audit_log
 from ..services.events import write_event
+from ..services.rate_limit import enforce_org_rate_limit
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
 
 router = APIRouter(prefix="/publish/jobs", tags=["publish"])
@@ -41,6 +42,7 @@ def create_publish_job(
     context: RequestContext = Depends(get_request_context),
 ) -> PublishJobResponse:
     require_role(context, Role.AGENT)
+    enforce_org_rate_limit(org_id=context.current_org_id, bucket_name="publish_jobs", max_requests=30, window_seconds=60)
     item = db.scalar(
         org_scoped(
             select(ContentItem).where(ContentItem.id == payload.content_item_id, ContentItem.deleted_at.is_(None)),

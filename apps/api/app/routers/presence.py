@@ -33,6 +33,7 @@ from ..schemas import (
 )
 from ..services.audit import write_audit_log
 from ..services.events import write_event
+from ..services.rate_limit import enforce_org_rate_limit
 from ..services.phase5 import build_presence_report, fetch_website_snapshot, mock_profile_snapshot
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
 
@@ -105,6 +106,7 @@ def run_presence_audit(
     context: RequestContext = Depends(get_request_context),
 ) -> PresenceAuditRunResponse:
     require_role(context, minimum_role=Role.ADMIN)
+    enforce_org_rate_limit(org_id=context.current_org_id, bucket_name="presence_audits", max_requests=10, window_seconds=60)
     validated = PresenceAuditInputJSON.model_validate(payload.model_dump(mode="json"))
     run = PresenceAuditRun(
         org_id=context.current_org_id,

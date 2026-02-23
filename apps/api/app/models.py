@@ -231,6 +231,11 @@ class REListingPackageStatus(str, enum.Enum):
     PUBLISHED = "published"
 
 
+class OnboardingSessionStatus(str, enum.Enum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
 class IdMixin:
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
@@ -1113,3 +1118,20 @@ class REListingPackage(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
         default=RiskTier.TIER_1,
     )
     policy_warnings_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+
+
+class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "onboarding_sessions"
+    __table_args__ = (
+        Index("ix_onboarding_sessions_org_id", "org_id"),
+        Index("ix_onboarding_sessions_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    status: Mapped[OnboardingSessionStatus] = mapped_column(
+        Enum(OnboardingSessionStatus, name="onboarding_session_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=OnboardingSessionStatus.IN_PROGRESS,
+    )
+    steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
