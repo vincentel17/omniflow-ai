@@ -1,6 +1,10 @@
 node_modules/
 .pnpm-store/
 .next/
+.next-build/
+.next-build-ci/
+.next-build-*/
+.next-playwright/
 dist/
 build/
 coverage/

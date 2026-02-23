@@ -209,3 +209,48 @@ class LinkResponse(BaseModel):
     destination_url: str
     utm_json: dict[str, object]
     created_at: datetime
+
+
+class ConnectorProviderResponse(BaseModel):
+    provider: str
+    mode: str
+    configured: bool
+
+
+class ConnectorStartRequest(BaseModel):
+    account_ref: str = Field(min_length=1, max_length=255)
+    display_name: str = Field(min_length=1, max_length=255)
+
+
+class ConnectorStartResponse(BaseModel):
+    provider: str
+    state: str
+    authorization_url: str
+
+
+class ConnectorCallbackRequest(BaseModel):
+    state: str = Field(min_length=8, max_length=255)
+    code: str = Field(min_length=1, max_length=2048)
+    account_ref: str = Field(min_length=1, max_length=255)
+    display_name: str = Field(min_length=1, max_length=255)
+
+
+class ConnectorAccountResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    provider: str
+    account_ref: str
+    display_name: str
+    status: str
+    created_at: datetime
+
+
+class ConnectorHealthResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    provider: str
+    account_ref: str
+    last_ok_at: datetime | None
+    last_error_at: datetime | None
+    last_error_msg: str | None
+    consecutive_failures: int

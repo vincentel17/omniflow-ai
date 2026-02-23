@@ -7,7 +7,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: join(__dirname, "../.."),
-  allowedDevOrigins: ["127.0.0.1"]
+  allowedDevOrigins: ["127.0.0.1"],
+  distDir:
+    process.env.PLAYWRIGHT === "1"
+      ? ".next-playwright"
+      : process.env.NEXT_DIST_DIR ?? ".next-build"
 };
 
 export default nextConfig;

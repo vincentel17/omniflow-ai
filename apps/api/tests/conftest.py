@@ -47,6 +47,7 @@ def db_session(migrated_db: None, db_url: str) -> Generator[Session, None, None]
         session.execute(
             text(
                 "TRUNCATE TABLE publish_jobs, approvals, content_items, campaign_plans, brand_profiles, link_tracking, "
+                "connector_dead_letters, connector_workflow_runs, connector_health, oauth_tokens, connector_accounts, "
                 "audit_logs, events, vertical_packs, integrations, memberships, users, orgs "
                 "RESTART IDENTITY CASCADE"
             )

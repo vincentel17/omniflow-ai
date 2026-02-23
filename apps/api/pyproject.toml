@@ -21,7 +21,8 @@ dependencies = [
   "python-json-logger==2.0.7",
   "opentelemetry-api==1.28.2",
   "opentelemetry-sdk==1.28.2",
-  "sentry-sdk==2.17.0"
+  "sentry-sdk==2.17.0",
+  "cryptography==46.0.5"
 ]
 
 [project.optional-dependencies]

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node -e \"const fs=require('node:fs'); const p=require('node:path'); const {spawnSync}=require('node:child_process'); const tsconfigPath=p.join(process.cwd(),'tsconfig.json'); const nextEnvPath=p.join(process.cwd(),'next-env.d.ts'); const dist='.next-build-'+Date.now(); const env={...process.env,NEXT_DIST_DIR:dist}; const result=spawnSync('next',['build'],{stdio:'inherit',shell:true,env}); try { const raw=fs.readFileSync(tsconfigPath,'utf8'); const cfg=JSON.parse(raw); const include=Array.isArray(cfg.include)?cfg.include:[]; cfg.include=include.filter((item)=>!/^\\.next-build-\\d+\\/types\\/\\*\\*\\/\\*\\.ts$/.test(String(item))); fs.writeFileSync(tsconfigPath, JSON.stringify(cfg, null, 2)+'\\n'); if (fs.existsSync(nextEnvPath)) { const lines=fs.readFileSync(nextEnvPath,'utf8').split(/\\r?\\n/).filter((line)=>!line.includes('.next-build-')); fs.writeFileSync(nextEnvPath, lines.join('\\n').trimEnd()+'\\n'); } } catch (_) {} process.exit(result.status ?? 1);\"",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

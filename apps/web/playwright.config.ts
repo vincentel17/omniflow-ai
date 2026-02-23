@@ -13,6 +13,9 @@ export default defineConfig({
     command: "pnpm exec next dev --port 3100",
     port: 3100,
     reuseExistingServer: false,
-    cwd: __dirname
+    cwd: __dirname,
+    env: {
+      PLAYWRIGHT: "1"
+    }
   }
 });

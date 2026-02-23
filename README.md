@@ -53,6 +53,24 @@ Run `make release-check` before release. It chains static checks, tests, e2e, bu
 6. View audit logs:
    - `GET /audit?limit=20&offset=0`
 
+## Phase 2 usage (mock connectors)
+
+1. Set connector env vars:
+   - `CONNECTOR_MODE=mock`
+   - `TOKEN_ENCRYPTION_KEY=<fernet-key>`
+   - `OAUTH_REDIRECT_URI=http://localhost:3000/api/auth/callback`
+2. Start OAuth flow (mock):
+   - `POST /connectors/{provider}/start`
+3. Complete callback (mock token exchange):
+   - `POST /connectors/{provider}/callback`
+4. List tenant-scoped connector accounts:
+   - `GET /connectors/accounts`
+5. Run health checks:
+   - `POST /connectors/{provider}/{account_ref}/healthcheck`
+   - `GET /connectors/health`
+
+See `docs/connectors.md` for architecture and extension guidance.
+
 ## Troubleshooting
 
 - If preflight fails on env vars, ensure `.env` includes all keys in `.env.schema.json`.
