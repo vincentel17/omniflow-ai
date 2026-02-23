@@ -12,7 +12,10 @@ from .routers.links import router as links_router
 from .routers.leads import router as leads_router
 from .routers.leads import sla_router
 from .routers.orgs import router as org_router
+from .routers.presence import router as presence_router
 from .routers.publish import router as publish_router
+from .routers.reputation import router as reputation_router
+from .routers.seo import router as seo_router
 from .routers.verticals import router as vertical_router
 
 app = FastAPI(title="OmniFlow API", version="0.1.0")
@@ -30,3 +33,6 @@ app.include_router(links_router)
 app.include_router(inbox_router)
 app.include_router(leads_router)
 app.include_router(sla_router)
+app.include_router(presence_router)
+app.include_router(seo_router)
+app.include_router(reputation_router)

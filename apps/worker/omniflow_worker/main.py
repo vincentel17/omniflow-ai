@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from celery import Celery
 from sqlalchemy import and_, select
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models import (
     AuditLog,
+    ConnectorAccount,
     ContentItem,
     ContentItemStatus,
     Event,
@@ -19,8 +20,15 @@ from app.models import (
     NurtureTask,
     NurtureTaskStatus,
     NurtureTaskType,
+    Org,
+    PresenceAuditRun,
+    PresenceAuditRunStatus,
+    PresenceTask,
+    PresenceTaskStatus,
+    PresenceTaskType,
     PublishJob,
     PublishJobStatus,
+    ReputationReview,
     RiskTier,
     SLAConfig,
 )
@@ -283,3 +291,122 @@ def sla_monitor_tick() -> int:
                 escalations += 1
         db.commit()
     return escalations
+
+
+@app.task(name="worker.presence.audit_tick")
+def presence_audit_tick() -> int:
+    """Mock-first scheduler stub: creates periodic successful audit runs for connected orgs."""
+    runs_created = 0
+    now = _now()
+    with SessionLocal() as db:
+        orgs = db.scalars(select(Org).where(Org.deleted_at.is_(None))).all()
+        for org in orgs:
+            has_connector = db.scalar(
+                select(ConnectorAccount.id).where(
+                    ConnectorAccount.org_id == org.id,
+                    ConnectorAccount.deleted_at.is_(None),
+                )
+            )
+            if has_connector is None:
+                continue
+            latest = db.scalar(
+                select(PresenceAuditRun)
+                .where(PresenceAuditRun.org_id == org.id, PresenceAuditRun.deleted_at.is_(None))
+                .order_by(PresenceAuditRun.created_at.desc())
+                .limit(1)
+            )
+            if latest is not None and latest.created_at >= now - timedelta(hours=24):
+                continue
+
+            run = PresenceAuditRun(
+                org_id=org.id,
+                started_at=now,
+                completed_at=now,
+                status=PresenceAuditRunStatus.SUCCEEDED,
+                inputs_json={"providers_to_audit": ["gbp", "meta", "linkedin"], "run_mode": "scheduled"},
+                summary_scores_json={"overall_score": 80, "category_scores": {"profile": 80, "seo": 80}},
+                notes_json={"mode": "scheduled_mock"},
+                error_json={},
+            )
+            db.add(run)
+            db.flush()
+            _write_system_event(
+                db=db,
+                org_id=org.id,
+                channel="presence",
+                event_type="PRESENCE_AUDIT_RUN",
+                content_id=run.id,
+                payload={"audit_run_id": str(run.id), "overall_score": 80},
+            )
+            _write_system_audit(
+                db=db,
+                org_id=org.id,
+                action="presence.audit_tick_executed",
+                target_type="presence_audit_run",
+                target_id=str(run.id),
+                risk_tier=RiskTier.TIER_1,
+                metadata={"mode": "scheduled_mock"},
+            )
+            runs_created += 1
+        db.commit()
+    return runs_created
+
+
+@app.task(name="worker.reputation.sla_tick")
+def reputation_sla_tick() -> int:
+    """Creates response tasks for negative reviews that remain unanswered past SLA."""
+    created = 0
+    now = _now()
+    threshold = now - timedelta(hours=24)
+    with SessionLocal() as db:
+        reviews = db.scalars(
+            select(ReputationReview).where(
+                ReputationReview.deleted_at.is_(None),
+                ReputationReview.rating <= 2,
+                ReputationReview.responded_at.is_(None),
+                ReputationReview.created_at <= threshold,
+            )
+        ).all()
+        for review in reviews:
+            existing = db.scalar(
+                select(PresenceTask.id).where(
+                    PresenceTask.org_id == review.org_id,
+                    PresenceTask.type == PresenceTaskType.RESPOND_REVIEW,
+                    PresenceTask.status == PresenceTaskStatus.OPEN,
+                    PresenceTask.deleted_at.is_(None),
+                    PresenceTask.payload_json["review_id"].as_string() == str(review.id),
+                )
+            )
+            if existing is not None:
+                continue
+            task = PresenceTask(
+                org_id=review.org_id,
+                finding_id=None,
+                type=PresenceTaskType.RESPOND_REVIEW,
+                assigned_to_user_id=None,
+                due_at=now,
+                status=PresenceTaskStatus.OPEN,
+                payload_json={"review_id": str(review.id), "reason": "negative_review_sla"},
+            )
+            db.add(task)
+            db.flush()
+            _write_system_event(
+                db=db,
+                org_id=review.org_id,
+                channel="reputation",
+                event_type="SLA_ESCALATED",
+                content_id=task.id,
+                payload={"review_id": str(review.id), "task_id": str(task.id)},
+            )
+            _write_system_audit(
+                db=db,
+                org_id=review.org_id,
+                action="reputation.sla_escalated",
+                target_type="reputation_review",
+                target_id=str(review.id),
+                risk_tier=RiskTier.TIER_2,
+                metadata={"task_id": str(task.id)},
+            )
+            created += 1
+        db.commit()
+    return created

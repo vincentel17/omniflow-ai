@@ -1,4 +1,4 @@
-from packages.schemas.phase3 import (
+﻿from packages.schemas.phase3 import (
     ApprovalDecision,
     CampaignPlanJSON,
     CampaignPlanPost,
@@ -13,6 +13,20 @@ from packages.schemas.phase4 import (
     ReplySuggestionJSON,
     RoutingDecisionJSON,
 )
+from packages.schemas.phase5 import (
+    PresenceActionJSON,
+    PresenceAuditInputJSON,
+    SEOClusterJSON,
+    SEOClusterPostJSON,
+    SEOFaqJSON,
+    PresenceFindingJSON,
+    PresenceHealthReportJSON,
+    ReviewResponseDraftJSON,
+    ReviewSentimentJSON,
+    SEOContentJSON,
+    SEOPlanJSON,
+    SEOServicePageJSON,
+)
 
 __all__ = [
     "ApprovalDecision",
@@ -24,6 +38,18 @@ __all__ = [
     "NormalizedMessage",
     "NormalizedThread",
     "NurturePlanJSON",
+    "PresenceActionJSON",
+    "PresenceAuditInputJSON",
+    "PresenceFindingJSON",
+    "PresenceHealthReportJSON",
     "ReplySuggestionJSON",
+    "ReviewResponseDraftJSON",
+    "ReviewSentimentJSON",
     "RoutingDecisionJSON",
+    "SEOClusterJSON",
+    "SEOClusterPostJSON",
+    "SEOContentJSON",
+    "SEOFaqJSON",
+    "SEOPlanJSON",
+    "SEOServicePageJSON",
 ]

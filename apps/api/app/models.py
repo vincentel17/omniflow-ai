@@ -109,6 +109,80 @@ class NurtureTaskStatus(str, enum.Enum):
     CANCELED = "canceled"
 
 
+class PresenceAuditRunStatus(str, enum.Enum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class PresenceFindingSeverity(str, enum.Enum):
+    INFO = "info"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class PresenceFindingStatus(str, enum.Enum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    IGNORED = "ignored"
+
+
+class PresenceTaskType(str, enum.Enum):
+    FIX_PROFILE = "fix_profile"
+    POST_GBP = "post_gbp"
+    UPDATE_HOURS = "update_hours"
+    ADD_PHOTOS = "add_photos"
+    CREATE_PAGE = "create_page"
+    WRITE_BLOG = "write_blog"
+    RESPOND_REVIEW = "respond_review"
+
+
+class PresenceTaskStatus(str, enum.Enum):
+    OPEN = "open"
+    DONE = "done"
+    CANCELED = "canceled"
+
+
+class SEOWorkItemType(str, enum.Enum):
+    SERVICE_PAGE = "service_page"
+    BLOG_POST = "blog_post"
+    BLOG_CLUSTER = "blog_cluster"
+    FAQ = "faq"
+    SCHEMA = "schema"
+
+
+class SEOWorkItemStatus(str, enum.Enum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
+class ReputationSource(str, enum.Enum):
+    GBP = "gbp"
+    MANUAL_IMPORT = "manual_import"
+
+
+class ReputationRequestCampaignStatus(str, enum.Enum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+
+
+class ReputationAudience(str, enum.Enum):
+    RECENT_CUSTOMERS = "recent_customers"
+    CLOSED_DEALS = "closed_deals"
+    CUSTOM = "custom"
+
+
+class ReputationChannel(str, enum.Enum):
+    EMAIL = "email"
+    SMS = "sms"
+
+
 class IdMixin:
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
@@ -619,3 +693,154 @@ class SLAConfig(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     response_time_minutes: Mapped[int] = mapped_column(nullable=False, default=30)
     escalation_minutes: Mapped[int] = mapped_column(nullable=False, default=60)
     notify_channels_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+
+
+class PresenceAuditRun(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "presence_audit_runs"
+    __table_args__ = (
+        Index("ix_presence_audit_runs_org_id", "org_id"),
+        Index("ix_presence_audit_runs_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[PresenceAuditRunStatus] = mapped_column(
+        Enum(PresenceAuditRunStatus, name="presence_audit_run_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=PresenceAuditRunStatus.RUNNING,
+    )
+    inputs_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    summary_scores_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    notes_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    error_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class PresenceFinding(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "presence_findings"
+    __table_args__ = (
+        Index("ix_presence_findings_org_id", "org_id"),
+        Index("ix_presence_findings_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    audit_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("presence_audit_runs.id"), nullable=False)
+    source: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    severity: Mapped[PresenceFindingSeverity] = mapped_column(
+        Enum(PresenceFindingSeverity, name="presence_finding_severity_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(2000), nullable=False)
+    evidence_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    recommendation_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    status: Mapped[PresenceFindingStatus] = mapped_column(
+        Enum(PresenceFindingStatus, name="presence_finding_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=PresenceFindingStatus.OPEN,
+    )
+
+
+class PresenceTask(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "presence_tasks"
+    __table_args__ = (
+        Index("ix_presence_tasks_org_id", "org_id"),
+        Index("ix_presence_tasks_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    finding_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("presence_findings.id"), nullable=True)
+    type: Mapped[PresenceTaskType] = mapped_column(
+        Enum(PresenceTaskType, name="presence_task_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[PresenceTaskStatus] = mapped_column(
+        Enum(PresenceTaskStatus, name="presence_task_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=PresenceTaskStatus.OPEN,
+    )
+    payload_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class SEOWorkItem(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "seo_work_items"
+    __table_args__ = (
+        Index("ix_seo_work_items_org_id", "org_id"),
+        Index("ix_seo_work_items_created_at", "created_at"),
+        UniqueConstraint("org_id", "type", "url_slug", name="uq_seo_work_items_org_type_slug"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    type: Mapped[SEOWorkItemType] = mapped_column(
+        Enum(SEOWorkItemType, name="seo_work_item_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    status: Mapped[SEOWorkItemStatus] = mapped_column(
+        Enum(SEOWorkItemStatus, name="seo_work_item_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=SEOWorkItemStatus.DRAFT,
+    )
+    target_keyword: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    url_slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    rendered_markdown: Mapped[str | None] = mapped_column(String(32000), nullable=True)
+    risk_tier: Mapped[RiskTier] = mapped_column(
+        Enum(RiskTier, name="risk_tier_enum", values_callable=_enum_values),
+        nullable=False,
+        default=RiskTier.TIER_1,
+    )
+    policy_warnings_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+
+
+class ReputationReview(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "reputation_reviews"
+    __table_args__ = (
+        Index("ix_reputation_reviews_org_id", "org_id"),
+        Index("ix_reputation_reviews_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    source: Mapped[ReputationSource] = mapped_column(
+        Enum(ReputationSource, name="reputation_source_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewer_name_masked: Mapped[str] = mapped_column(String(255), nullable=False)
+    rating: Mapped[int] = mapped_column(nullable=False)
+    review_text: Mapped[str] = mapped_column(String(8000), nullable=False)
+    review_text_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    sentiment_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ReputationRequestCampaign(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "reputation_request_campaigns"
+    __table_args__ = (
+        Index("ix_reputation_request_campaigns_org_id", "org_id"),
+        Index("ix_reputation_request_campaigns_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[ReputationRequestCampaignStatus] = mapped_column(
+        Enum(
+            ReputationRequestCampaignStatus,
+            name="reputation_request_campaign_status_enum",
+            values_callable=_enum_values,
+        ),
+        nullable=False,
+        default=ReputationRequestCampaignStatus.DRAFT,
+    )
+    audience: Mapped[ReputationAudience] = mapped_column(
+        Enum(ReputationAudience, name="reputation_audience_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    template_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    channel: Mapped[ReputationChannel] = mapped_column(
+        Enum(ReputationChannel, name="reputation_channel_enum", values_callable=_enum_values),
+        nullable=False,
+    )

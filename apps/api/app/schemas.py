@@ -16,9 +16,20 @@ from .models import (
     LeadStatus,
     NurtureTaskStatus,
     NurtureTaskType,
+    PresenceAuditRunStatus,
+    PresenceFindingSeverity,
+    PresenceFindingStatus,
+    PresenceTaskStatus,
+    PresenceTaskType,
     PublishJobStatus,
+    ReputationAudience,
+    ReputationChannel,
+    ReputationRequestCampaignStatus,
+    ReputationSource,
     RiskTier,
     Role,
+    SEOWorkItemStatus,
+    SEOWorkItemType,
 )
 
 
@@ -402,4 +413,154 @@ class SLAConfigResponse(BaseModel):
     response_time_minutes: int
     escalation_minutes: int
     notify_channels_json: list[str]
+    created_at: datetime
+
+
+class PresenceAuditRunRequest(BaseModel):
+    website_url: HttpUrl | None = None
+    providers_to_audit: list[str] = Field(default_factory=list, max_length=8)
+    account_refs: dict[str, list[str]] = Field(default_factory=dict)
+    run_mode: str = Field(default="manual", pattern="^(manual|scheduled)$")
+
+
+class PresenceAuditRunResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    started_at: datetime
+    completed_at: datetime | None
+    status: PresenceAuditRunStatus
+    inputs_json: dict[str, object]
+    summary_scores_json: dict[str, object]
+    notes_json: dict[str, object]
+    error_json: dict[str, object]
+    created_at: datetime
+
+
+class PresenceFindingResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    audit_run_id: uuid.UUID
+    source: str
+    category: str
+    severity: PresenceFindingSeverity
+    title: str
+    description: str
+    evidence_json: dict[str, object]
+    recommendation_json: dict[str, object]
+    status: PresenceFindingStatus
+    created_at: datetime
+
+
+class PresenceFindingStatusUpdateRequest(BaseModel):
+    status: PresenceFindingStatus
+
+
+class PresenceTaskCreateRequest(BaseModel):
+    finding_id: uuid.UUID | None = None
+    type: PresenceTaskType
+    assigned_to_user_id: uuid.UUID | None = None
+    due_at: datetime | None = None
+    payload_json: dict[str, object] = Field(default_factory=dict)
+
+
+class PresenceTaskResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    finding_id: uuid.UUID | None
+    type: PresenceTaskType
+    assigned_to_user_id: uuid.UUID | None
+    due_at: datetime | None
+    status: PresenceTaskStatus
+    payload_json: dict[str, object]
+    created_at: datetime
+
+
+class SEOPlanRequest(BaseModel):
+    audit_run_id: uuid.UUID | None = None
+    target_locations: list[str] = Field(default_factory=list, max_length=20)
+
+
+class SEOPlanResponse(BaseModel):
+    service_pages: list[dict[str, object]] = Field(default_factory=list)
+    blog_clusters: list[dict[str, object]] = Field(default_factory=list)
+    internal_linking_suggestions: list[str] = Field(default_factory=list)
+    schema_suggestions: list[str] = Field(default_factory=list)
+
+
+class SEOWorkItemCreateRequest(BaseModel):
+    type: SEOWorkItemType
+    target_keyword: str = Field(min_length=1, max_length=255)
+    target_location: str | None = Field(default=None, max_length=255)
+    url_slug: str = Field(min_length=1, max_length=255)
+    content_json: dict[str, object] = Field(default_factory=dict)
+
+
+class SEOWorkItemResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    type: SEOWorkItemType
+    status: SEOWorkItemStatus
+    target_keyword: str
+    target_location: str | None
+    url_slug: str
+    content_json: dict[str, object]
+    rendered_markdown: str | None
+    risk_tier: RiskTier
+    policy_warnings_json: list[str]
+    created_at: datetime
+
+
+class SEOWorkItemApproveRequest(BaseModel):
+    status: SEOWorkItemStatus = Field(default=SEOWorkItemStatus.APPROVED)
+
+
+class ReputationReviewImportItem(BaseModel):
+    source: ReputationSource = ReputationSource.MANUAL_IMPORT
+    external_id: str | None = Field(default=None, max_length=255)
+    reviewer_name: str | None = Field(default=None, max_length=255)
+    rating: int = Field(ge=1, le=5)
+    review_text: str = Field(min_length=1, max_length=8000)
+
+
+class ReputationReviewImportRequest(BaseModel):
+    reviews: list[ReputationReviewImportItem] = Field(default_factory=list, max_length=200)
+
+
+class ReputationReviewResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    source: ReputationSource
+    external_id: str | None
+    reviewer_name_masked: str
+    rating: int
+    review_text: str
+    review_text_hash: str
+    sentiment_json: dict[str, object]
+    responded_at: datetime | None
+    created_at: datetime
+
+
+class ReputationDraftResponse(BaseModel):
+    response_text: str
+    tone: str
+    disclaimers: list[str]
+    risk_tier: RiskTier
+    policy_warnings: list[str]
+
+
+class ReputationCampaignCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    audience: ReputationAudience
+    template_key: str = Field(min_length=1, max_length=100)
+    channel: ReputationChannel
+
+
+class ReputationCampaignResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    name: str
+    status: ReputationRequestCampaignStatus
+    audience: ReputationAudience
+    template_key: str
+    channel: ReputationChannel
     created_at: datetime
