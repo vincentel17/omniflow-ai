@@ -46,7 +46,8 @@ def db_session(migrated_db: None, db_url: str) -> Generator[Session, None, None]
         # Truncate all org-scoped and global entities between integration test cases.
         session.execute(
             text(
-                "TRUNCATE TABLE audit_logs, events, vertical_packs, integrations, memberships, users, orgs "
+                "TRUNCATE TABLE publish_jobs, approvals, content_items, campaign_plans, brand_profiles, link_tracking, "
+                "audit_logs, events, vertical_packs, integrations, memberships, users, orgs "
                 "RESTART IDENTITY CASCADE"
             )
         )

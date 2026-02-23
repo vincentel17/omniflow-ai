@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     dev_user_id: str = "11111111-1111-1111-1111-111111111111"
     dev_org_id: str = "22222222-2222-2222-2222-222222222222"
     dev_role: str = "owner"
+    ai_mode: str = "mock"
+    openai_api_key: str | None = None
 
 
 settings = Settings()
