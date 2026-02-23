@@ -4,14 +4,18 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { getDevContext } from "../lib/dev-context";
+import { getCurrentPackSlug } from "../lib/vertical-pack";
 
 export const metadata: Metadata = {
   title: "OmniFlow AI",
   description: "Conversion-optimized AI-assisted revenue operations layer"
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   const context = getDevContext();
+  const packSlug = await getCurrentPackSlug();
+  const isRealEstate = packSlug === "real-estate";
+
   return (
     <html lang="en">
       <body>
@@ -23,9 +27,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/settings/verticals">Verticals</Link>
               <Link href="/events">Events</Link>
               <Link href="/audit">Audit</Link>
+              {isRealEstate ? <Link href="/real-estate/deals">Real Estate</Link> : null}
             </nav>
             <p className="text-xs text-slate-400">
-              org: {context.orgId} • role: {context.role}
+              org: {context.orgId} | role: {context.role}
             </p>
           </div>
         </header>
@@ -34,3 +39,4 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
+
