@@ -216,6 +216,12 @@ class BrandProfileResponse(BaseModel):
 
 class LinkCreateRequest(BaseModel):
     destination_url: HttpUrl
+    source: str | None = Field(default=None, max_length=100)
+    medium: str | None = Field(default=None, max_length=100)
+    campaign: str | None = Field(default=None, max_length=255)
+    content_id: str | None = Field(default=None, max_length=255)
+    campaign_plan_id: str | None = Field(default=None, max_length=255)
+    channel: str | None = Field(default=None, max_length=100)
     utm_json: dict[str, object] = Field(default_factory=dict)
 
 
@@ -226,6 +232,52 @@ class LinkResponse(BaseModel):
     destination_url: str
     utm_json: dict[str, object]
     created_at: datetime
+    short_url_path: str
+
+
+class LinkAttachLeadRequest(BaseModel):
+    lead_id: uuid.UUID
+
+
+class AnalyticsOverviewResponse(BaseModel):
+    totals: dict[str, int]
+    avg_response_time_minutes: float | None
+    presence_overall_score_latest: int | None
+    staff_reduction_index: dict[str, object]
+    top_channels: list[dict[str, object]]
+
+
+class AnalyticsContentResponse(BaseModel):
+    group_by: str
+    content_items_by_status: dict[str, int]
+    publish_success_rate: float
+    clicks_by_content: list[dict[str, object]]
+    leads_by_content: list[dict[str, object]]
+
+
+class AnalyticsFunnelResponse(BaseModel):
+    stages: dict[str, int]
+    conversion_rates: dict[str, float]
+
+
+class AnalyticsSLAResponse(BaseModel):
+    avg_first_response_time_minutes: float | None
+    within_sla_percent: float
+    escalations_triggered: int
+    overdue_threads_count: int
+
+
+class AnalyticsPresenceResponse(BaseModel):
+    group_by: str
+    audit_runs_count: int
+    score_trend: list[dict[str, object]]
+    open_findings_count: int
+
+
+class AnalyticsWorkloadResponse(BaseModel):
+    estimated_minutes_saved_total: int
+    breakdown_by_action_type: dict[str, int]
+    automation_coverage_rate: float
 
 
 class ConnectorProviderResponse(BaseModel):

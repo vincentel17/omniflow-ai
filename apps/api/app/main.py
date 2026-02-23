@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from .routers.audit import router as audit_router
+from .routers.analytics import router as analytics_router
 from .routers.brand import router as brand_router
 from .routers.campaigns import router as campaigns_router
 from .routers.content import router as content_router
@@ -24,6 +25,7 @@ app.include_router(org_router)
 app.include_router(vertical_router)
 app.include_router(events_router)
 app.include_router(audit_router)
+app.include_router(analytics_router)
 app.include_router(campaigns_router)
 app.include_router(content_router)
 app.include_router(connectors_router)
