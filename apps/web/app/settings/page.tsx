@@ -26,6 +26,26 @@ export default function SettingsPage() {
           </Link>
         </li>
         <li>
+          <Link className="underline" href="/presence">
+            Presence Health
+          </Link>
+        </li>
+        <li>
+          <Link className="underline" href="/presence/audits">
+            Presence Audits
+          </Link>
+        </li>
+        <li>
+          <Link className="underline" href="/seo">
+            SEO Engine
+          </Link>
+        </li>
+        <li>
+          <Link className="underline" href="/reputation">
+            Reputation Manager
+          </Link>
+        </li>
+        <li>
           <Link className="underline" href="/leads">
             Leads
           </Link>
