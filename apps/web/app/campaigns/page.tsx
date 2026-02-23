@@ -1,0 +1,25 @@
+import { apiFetch } from "../../lib/api";
+import { CampaignPlanner } from "./planner";
+
+type Campaign = {
+  id: string;
+  week_start_date: string;
+  status: string;
+  vertical_pack_slug: string;
+  created_at: string;
+};
+
+async function getCampaigns(): Promise<Campaign[]> {
+  return apiFetch<Campaign[]>("/campaigns?limit=50&offset=0");
+}
+
+export default async function CampaignsPage() {
+  const campaigns = await getCampaigns();
+  return (
+    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+      <h1 className="text-3xl font-semibold">Campaign Planner</h1>
+      <p className="mt-2 text-slate-300">Generate weekly plan JSON and create content items from it.</p>
+      <CampaignPlanner campaigns={campaigns} />
+    </main>
+  );
+}
