@@ -267,6 +267,8 @@ class Event(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_events_org_id", "org_id"),
         Index("ix_events_created_at", "created_at"),
+        Index("ix_events_org_type_created_at", "org_id", "type", "created_at"),
+        Index("ix_events_org_created_at", "org_id", "created_at"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
@@ -469,6 +471,7 @@ class PublishJob(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
         UniqueConstraint("org_id", "content_item_id", name="uq_publish_jobs_org_content_item"),
         Index("ix_publish_jobs_org_id", "org_id"),
         Index("ix_publish_jobs_created_at", "created_at"),
+        Index("ix_publish_jobs_org_status_schedule_at", "org_id", "status", "schedule_at"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
@@ -504,18 +507,50 @@ class BrandProfile(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     require_approval_for_publish: Mapped[bool] = mapped_column(nullable=False, default=True)
 
 
+class OrgSettings(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "org_settings"
+    __table_args__ = (
+        UniqueConstraint("org_id", name="uq_org_settings_org_id"),
+        Index("ix_org_settings_org_id", "org_id"),
+        Index("ix_org_settings_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    settings_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
 class LinkTracking(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "link_tracking"
     __table_args__ = (
         UniqueConstraint("org_id", "short_code", name="uq_link_tracking_org_short_code"),
+        UniqueConstraint("short_code", name="uq_link_tracking_short_code"),
         Index("ix_link_tracking_org_id", "org_id"),
         Index("ix_link_tracking_created_at", "created_at"),
+        Index("ix_link_tracking_org_created_at", "org_id", "created_at"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
     short_code: Mapped[str] = mapped_column(String(32), nullable=False)
     destination_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     utm_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class LinkClick(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "link_clicks"
+    __table_args__ = (
+        Index("ix_link_clicks_org_id", "org_id"),
+        Index("ix_link_clicks_created_at", "created_at"),
+        Index("ix_link_clicks_org_clicked_at", "org_id", "clicked_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    tracked_link_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("link_tracking.id"), nullable=False)
+    short_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    clicked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    referrer: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    user_agent_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ip_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("leads.id"), nullable=True)
 
 
 class Pipeline(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
