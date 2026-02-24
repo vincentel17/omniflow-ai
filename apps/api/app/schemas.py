@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from .models import (
     ApprovalStatus,
@@ -435,6 +435,7 @@ class LeadPatchRequest(BaseModel):
 
 
 class LeadScoreResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     id: uuid.UUID
     org_id: uuid.UUID
     lead_id: uuid.UUID

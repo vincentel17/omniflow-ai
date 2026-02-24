@@ -22,7 +22,8 @@ dependencies = [
   "opentelemetry-api==1.28.2",
   "opentelemetry-sdk==1.28.2",
   "sentry-sdk==2.17.0",
-  "cryptography==46.0.5"
+  "cryptography==46.0.5",
+  "httpx==0.27.2"
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,7 @@ markers = [
   "integration: tests requiring postgres and redis"
 ]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 100
@@ -55,3 +57,4 @@ target-version = "py312"
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+
