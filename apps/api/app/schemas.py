@@ -332,6 +332,26 @@ class ConnectorHealthResponse(BaseModel):
     last_error_at: datetime | None
     last_error_msg: str | None
     consecutive_failures: int
+    last_http_status: int | None = None
+    last_provider_error_code: str | None = None
+    last_rate_limit_reset_at: datetime | None = None
+
+
+class ConnectorDiagnosticsResponse(BaseModel):
+    id: uuid.UUID
+    provider: str
+    account_ref: str
+    account_status: str
+    scopes: list[str]
+    expires_at: datetime | None
+    health_status: str
+    breaker_state: str
+    last_error_msg: str | None
+    last_http_status: int | None
+    last_provider_error_code: str | None
+    last_rate_limit_reset_at: datetime | None
+    reauth_required: bool
+    mode_effective: str
 
 
 class InboxIngestMockRequest(BaseModel):
@@ -486,6 +506,7 @@ class OpsSettingsResponse(BaseModel):
     enable_seo_generation: bool = True
     enable_review_response_drafts: bool = True
     connector_mode: str = Field(default="mock", pattern="^(mock|live)$")
+    providers_enabled_json: dict[str, bool] = Field(default_factory=dict)
     ai_mode: str = Field(default="mock", pattern="^(mock|live)$")
     max_auto_approve_tier: int = Field(default=1, ge=0, le=4)
     automation_weights: dict[str, int] = Field(default_factory=dict)
@@ -500,6 +521,7 @@ class OpsSettingsPatchRequest(BaseModel):
     enable_seo_generation: bool | None = None
     enable_review_response_drafts: bool | None = None
     connector_mode: str | None = Field(default=None, pattern="^(mock|live)$")
+    providers_enabled_json: dict[str, bool] | None = None
     ai_mode: str | None = Field(default=None, pattern="^(mock|live)$")
     max_auto_approve_tier: int | None = Field(default=None, ge=0, le=4)
     automation_weights: dict[str, int] | None = None
@@ -821,3 +843,4 @@ class REListingPackageResponse(BaseModel):
     risk_tier: RiskTier
     policy_warnings_json: list[str]
     created_at: datetime
+

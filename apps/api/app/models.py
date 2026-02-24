@@ -403,6 +403,9 @@ class ConnectorHealth(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_msg: Mapped[str | None] = mapped_column(String(500), nullable=True)
     consecutive_failures: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_http_status: Mapped[int | None] = mapped_column(nullable=True)
+    last_provider_error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_rate_limit_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ConnectorWorkflowRun(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -1135,3 +1138,4 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+

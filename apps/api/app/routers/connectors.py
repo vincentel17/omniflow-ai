@@ -4,8 +4,8 @@ import uuid
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -14,6 +14,7 @@ from ..redis_client import get_redis_client
 from ..schemas import (
     ConnectorAccountResponse,
     ConnectorCallbackRequest,
+    ConnectorDiagnosticsResponse,
     ConnectorHealthResponse,
     ConnectorProviderResponse,
     ConnectorStartRequest,
@@ -23,14 +24,29 @@ from ..services.audit import write_audit_log
 from ..services.connector_manager import verify_connector_health
 from ..services.events import write_event
 from ..services.oauth_state import consume_oauth_state, create_oauth_state
-from ..services.org_settings import connector_mode_for_org
-from ..services.token_vault import store_tokens
+from ..services.org_settings import connector_mode_for_org, provider_enabled_for_org
+from ..services.token_vault import get_token_row, store_tokens
 from ..settings import settings
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
 
 SUPPORTED_PROVIDERS = ("google-business-profile", "meta", "linkedin")
+
+_REQUIRED_SCOPES: dict[str, dict[str, set[str]]] = {
+    "google-business-profile": {
+        "publish": {"business.manage"},
+        "inbox": {"business.manage"},
+    },
+    "meta": {
+        "publish": {"pages_manage_posts"},
+        "inbox": {"pages_messaging"},
+    },
+    "linkedin": {
+        "publish": {"w_member_social"},
+        "inbox": {"r_organization_social"},
+    },
+}
 
 
 def _provider_is_configured(provider: str) -> bool:
@@ -41,6 +57,83 @@ def _provider_is_configured(provider: str) -> bool:
     if provider == "google-business-profile":
         return bool(settings.google_client_id and settings.google_client_secret)
     return False
+
+
+def _ensure_provider(provider: str) -> None:
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+
+def _serialize_account(row: ConnectorAccount) -> ConnectorAccountResponse:
+    return ConnectorAccountResponse(
+        id=row.id,
+        org_id=row.org_id,
+        provider=row.provider,
+        account_ref=row.account_ref,
+        display_name=row.display_name,
+        status=row.status,
+        created_at=row.created_at,
+    )
+
+
+def _serialize_health(row: ConnectorHealth) -> ConnectorHealthResponse:
+    return ConnectorHealthResponse(
+        id=row.id,
+        org_id=row.org_id,
+        provider=row.provider,
+        account_ref=row.account_ref,
+        last_ok_at=row.last_ok_at,
+        last_error_at=row.last_error_at,
+        last_error_msg=row.last_error_msg,
+        consecutive_failures=row.consecutive_failures,
+        last_http_status=row.last_http_status,
+        last_provider_error_code=row.last_provider_error_code,
+        last_rate_limit_reset_at=row.last_rate_limit_reset_at,
+    )
+
+
+def _missing_required_scopes(provider: str, operation: str, token_scopes: list[str]) -> list[str]:
+    required = _REQUIRED_SCOPES.get(provider, {}).get(operation, set())
+    if not required:
+        return []
+    available = set(token_scopes)
+    return sorted(scope for scope in required if scope not in available)
+
+
+def _diagnostics(
+    account: ConnectorAccount,
+    health: ConnectorHealth | None,
+    token: OAuthToken | None,
+    mode_effective: str,
+) -> ConnectorDiagnosticsResponse:
+    scopes = token.scopes_json if token is not None and isinstance(token.scopes_json, list) else []
+    last_error_msg = None
+    if health is not None and isinstance(health.last_error_msg, str):
+        last_error_msg = health.last_error_msg[:200]
+    failures = int(health.consecutive_failures or 0) if health is not None else 0
+    breaker_state = "open" if account.status == "circuit_open" or failures >= settings.connector_circuit_breaker_threshold else "closed"
+    health_status = "ok"
+    if breaker_state == "open":
+        health_status = "degraded"
+    elif health is not None and health.last_error_at is not None:
+        health_status = "error"
+
+    return ConnectorDiagnosticsResponse(
+        id=account.id,
+        provider=account.provider,
+        account_ref=account.account_ref,
+        account_status=account.status,
+        scopes=[str(scope) for scope in scopes if isinstance(scope, str)],
+        expires_at=token.expires_at if token is not None else None,
+        health_status=health_status,
+        breaker_state=breaker_state,
+        last_error_msg=last_error_msg,
+        last_http_status=health.last_http_status if health is not None else None,
+        last_provider_error_code=health.last_provider_error_code if health is not None else None,
+        last_rate_limit_reset_at=health.last_rate_limit_reset_at if health is not None else None,
+        reauth_required=account.status == "reauth_required",
+        mode_effective=mode_effective,
+    )
 
 
 @router.get("/providers", response_model=list[ConnectorProviderResponse])
@@ -69,11 +162,14 @@ def start_oauth(
 ) -> ConnectorStartResponse:
     del payload
     require_role(context, Role.ADMIN)
-    if provider not in SUPPORTED_PROVIDERS:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+    _ensure_provider(provider)
+
+    if not settings.oauth_redirect_allowed(settings.oauth_redirect_uri):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="oauth redirect uri is not allowed")
 
     state = create_oauth_state(get_redis_client(), context.current_org_id, provider)
-    if connector_mode_for_org(db, context.current_org_id) == "mock":
+    mode = connector_mode_for_org(db, context.current_org_id)
+    if mode == "mock":
         params = urlencode({"state": state, "code": "mock-code"})
         auth_url = f"{settings.oauth_redirect_uri}?{params}"
     else:
@@ -97,8 +193,7 @@ def oauth_callback(
     context: RequestContext = Depends(get_request_context),
 ) -> ConnectorAccountResponse:
     require_role(context, Role.ADMIN)
-    if provider not in SUPPORTED_PROVIDERS:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+    _ensure_provider(provider)
 
     state_data = consume_oauth_state(get_redis_client(), payload.state)
     if state_data is None:
@@ -128,10 +223,13 @@ def oauth_callback(
         account.deleted_at = None
     db.flush()
 
+    mode = connector_mode_for_org(db, context.current_org_id)
     access_token = f"mock-access-{provider}-{payload.account_ref}"
     refresh_token = f"mock-refresh-{provider}-{payload.account_ref}"
-    if connector_mode_for_org(db, context.current_org_id) != "mock":
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="live oauth exchange not implemented")
+    granted_scopes = sorted(_REQUIRED_SCOPES.get(provider, {}).get("publish", set()) | _REQUIRED_SCOPES.get(provider, {}).get("inbox", set()))
+
+    if mode == "live" and not _provider_is_configured(provider):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="provider not configured for live oauth")
 
     store_tokens(
         db=db,
@@ -140,9 +238,10 @@ def oauth_callback(
         account_ref=payload.account_ref,
         access_token=access_token,
         refresh_token=refresh_token,
-        scopes=["basic"],
-        expires_at=None,
+        scopes=granted_scopes,
+        expires_at=datetime.now(UTC),
     )
+
     health = db.scalar(
         select(ConnectorHealth).where(
             ConnectorHealth.org_id == context.current_org_id,
@@ -163,6 +262,8 @@ def oauth_callback(
         health.last_ok_at = datetime.now(UTC)
         health.last_error_at = None
         health.last_error_msg = None
+        health.last_http_status = None
+        health.last_provider_error_code = None
         health.consecutive_failures = 0
         health.deleted_at = None
 
@@ -188,24 +289,18 @@ def oauth_callback(
         source="connectors",
         channel=provider,
         event_type="CONNECTOR_LINKED",
-        payload_json={"provider": provider, "account_ref": payload.account_ref},
+        payload_json={"provider": provider, "account_ref": payload.account_ref, "mode": mode},
         actor_id=str(context.current_user_id),
     )
     db.commit()
     db.refresh(account)
-    return ConnectorAccountResponse(
-        id=account.id,
-        org_id=account.org_id,
-        provider=account.provider,
-        account_ref=account.account_ref,
-        display_name=account.display_name,
-        status=account.status,
-        created_at=account.created_at,
-    )
+    return _serialize_account(account)
 
 
 @router.get("/accounts", response_model=list[ConnectorAccountResponse])
 def list_accounts(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
 ) -> list[ConnectorAccountResponse]:
@@ -213,23 +308,59 @@ def list_accounts(
         org_scoped(
             select(ConnectorAccount)
             .where(ConnectorAccount.deleted_at.is_(None))
-            .order_by(ConnectorAccount.created_at.desc()),
+            .order_by(desc(ConnectorAccount.created_at))
+            .limit(limit)
+            .offset(offset),
             context.current_org_id,
             ConnectorAccount,
         )
     ).all()
-    return [
-        ConnectorAccountResponse(
-            id=row.id,
-            org_id=row.org_id,
-            provider=row.provider,
-            account_ref=row.account_ref,
-            display_name=row.display_name,
-            status=row.status,
-            created_at=row.created_at,
+    return [_serialize_account(row) for row in rows]
+
+
+@router.get("/accounts/{account_id}/diagnostics", response_model=ConnectorDiagnosticsResponse)
+def connector_diagnostics(
+    account_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ConnectorDiagnosticsResponse:
+    require_role(context, Role.MEMBER)
+    account = db.scalar(
+        org_scoped(
+            select(ConnectorAccount).where(ConnectorAccount.id == account_id, ConnectorAccount.deleted_at.is_(None)),
+            context.current_org_id,
+            ConnectorAccount,
         )
-        for row in rows
-    ]
+    )
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="connector account not found")
+
+    token = get_token_row(db=db, org_id=context.current_org_id, provider=account.provider, account_ref=account.account_ref)
+    health = db.scalar(
+        org_scoped(
+            select(ConnectorHealth).where(
+                ConnectorHealth.provider == account.provider,
+                ConnectorHealth.account_ref == account.account_ref,
+                ConnectorHealth.deleted_at.is_(None),
+            ),
+            context.current_org_id,
+            ConnectorHealth,
+        )
+    )
+
+    mode_effective = "live" if provider_enabled_for_org(db, context.current_org_id, account.provider, "publish") else "mock"
+    diagnostics = _diagnostics(account=account, health=health, token=token, mode_effective=mode_effective)
+
+    missing_scopes = _missing_required_scopes(account.provider, "publish", diagnostics.scopes)
+    if missing_scopes and account.status == "linked":
+        account.status = "reauth_required"
+        if health is not None:
+            health.last_error_msg = f"missing scopes: {', '.join(missing_scopes)}"
+        db.flush()
+        diagnostics = _diagnostics(account=account, health=health, token=token, mode_effective=mode_effective)
+
+    db.commit()
+    return diagnostics
 
 
 @router.post("/accounts/{account_id}/disconnect", response_model=ConnectorAccountResponse)
@@ -254,14 +385,7 @@ def disconnect_account(
 
     row.status = "disconnected"
     row.deleted_at = datetime.now(UTC)
-    token = db.scalar(
-        select(OAuthToken).where(
-            OAuthToken.org_id == context.current_org_id,
-            OAuthToken.provider == row.provider,
-            OAuthToken.account_ref == row.account_ref,
-            OAuthToken.deleted_at.is_(None),
-        )
-    )
+    token = get_token_row(db=db, org_id=context.current_org_id, provider=row.provider, account_ref=row.account_ref)
     if token is not None:
         token.deleted_at = datetime.now(UTC)
 
@@ -283,33 +407,40 @@ def disconnect_account(
         actor_id=str(context.current_user_id),
     )
     db.commit()
-    return ConnectorAccountResponse(
-        id=row.id,
-        org_id=row.org_id,
-        provider=row.provider,
-        account_ref=row.account_ref,
-        display_name=row.display_name,
-        status=row.status,
-        created_at=row.created_at,
-    )
+    return _serialize_account(row)
 
 
-@router.post("/{provider}/{account_ref}/reenable", response_model=ConnectorHealthResponse)
-def reenable_connector(
-    provider: str,
-    account_ref: str,
+@router.post("/accounts/{account_id}/revoke", response_model=ConnectorAccountResponse)
+def revoke_account(
+    account_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ConnectorAccountResponse:
+    return disconnect_account(account_id=account_id, db=db, context=context)
+
+
+@router.post("/accounts/{account_id}/breaker/reset", response_model=ConnectorHealthResponse)
+def breaker_reset(
+    account_id: uuid.UUID,
     db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
 ) -> ConnectorHealthResponse:
     require_role(context, Role.ADMIN)
-    if provider not in SUPPORTED_PROVIDERS:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+    account = db.scalar(
+        org_scoped(
+            select(ConnectorAccount).where(ConnectorAccount.id == account_id, ConnectorAccount.deleted_at.is_(None)),
+            context.current_org_id,
+            ConnectorAccount,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="connector account not found")
 
     health = db.scalar(
         org_scoped(
             select(ConnectorHealth).where(
-                ConnectorHealth.provider == provider,
-                ConnectorHealth.account_ref == account_ref,
+                ConnectorHealth.provider == account.provider,
+                ConnectorHealth.account_ref == account.account_ref,
                 ConnectorHealth.deleted_at.is_(None),
             ),
             context.current_org_id,
@@ -317,55 +448,36 @@ def reenable_connector(
         )
     )
     if health is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="connector health not found")
+        health = ConnectorHealth(org_id=context.current_org_id, provider=account.provider, account_ref=account.account_ref)
+        db.add(health)
 
     health.consecutive_failures = 0
     health.last_error_at = None
     health.last_error_msg = None
-
-    account = db.scalar(
-        org_scoped(
-            select(ConnectorAccount).where(
-                ConnectorAccount.provider == provider,
-                ConnectorAccount.account_ref == account_ref,
-                ConnectorAccount.deleted_at.is_(None),
-            ),
-            context.current_org_id,
-            ConnectorAccount,
-        )
-    )
-    if account is not None and account.status != "linked":
-        account.status = "linked"
+    health.last_http_status = None
+    health.last_provider_error_code = None
+    account.status = "linked"
 
     write_audit_log(
         db=db,
         context=context,
-        action="connector.reenabled",
+        action="connector.breaker_reset",
         target_type="connector_health",
         target_id=str(health.id),
-        metadata_json={"provider": provider, "account_ref": account_ref},
+        metadata_json={"provider": account.provider, "account_ref": account.account_ref},
     )
     write_event(
         db=db,
         org_id=context.current_org_id,
         source="connectors",
-        channel=provider,
-        event_type="CONNECTOR_REENABLED",
-        payload_json={"provider": provider, "account_ref": account_ref},
+        channel=account.provider,
+        event_type="CONNECTOR_BREAKER_RESET",
+        payload_json={"provider": account.provider, "account_ref": account.account_ref},
         actor_id=str(context.current_user_id),
     )
     db.commit()
     db.refresh(health)
-    return ConnectorHealthResponse(
-        id=health.id,
-        org_id=health.org_id,
-        provider=health.provider,
-        account_ref=health.account_ref,
-        last_ok_at=health.last_ok_at,
-        last_error_at=health.last_error_at,
-        last_error_msg=health.last_error_msg,
-        consecutive_failures=health.consecutive_failures,
-    )
+    return _serialize_health(health)
 
 
 @router.post("/{provider}/{account_ref}/healthcheck", response_model=ConnectorHealthResponse)
@@ -376,8 +488,7 @@ def run_healthcheck(
     context: RequestContext = Depends(get_request_context),
 ) -> ConnectorHealthResponse:
     require_role(context, Role.MEMBER)
-    if provider not in SUPPORTED_PROVIDERS:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+    _ensure_provider(provider)
     try:
         health = verify_connector_health(db=db, provider=provider, org_id=context.current_org_id, account_ref=account_ref)
     except ValueError as exc:
@@ -392,20 +503,32 @@ def run_healthcheck(
         actor_id=str(context.current_user_id),
     )
     db.commit()
-    return ConnectorHealthResponse(
-        id=health.id,
-        org_id=health.org_id,
-        provider=health.provider,
-        account_ref=health.account_ref,
-        last_ok_at=health.last_ok_at,
-        last_error_at=health.last_error_at,
-        last_error_msg=health.last_error_msg,
-        consecutive_failures=health.consecutive_failures,
+    return _serialize_health(health)
+
+
+@router.post("/accounts/{account_id}/healthcheck", response_model=ConnectorHealthResponse)
+def run_healthcheck_by_id(
+    account_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ConnectorHealthResponse:
+    require_role(context, Role.MEMBER)
+    account = db.scalar(
+        org_scoped(
+            select(ConnectorAccount).where(ConnectorAccount.id == account_id, ConnectorAccount.deleted_at.is_(None)),
+            context.current_org_id,
+            ConnectorAccount,
+        )
     )
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="connector account not found")
+    return run_healthcheck(provider=account.provider, account_ref=account.account_ref, db=db, context=context)
 
 
 @router.get("/health", response_model=list[ConnectorHealthResponse])
 def list_health(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
 ) -> list[ConnectorHealthResponse]:
@@ -413,21 +536,11 @@ def list_health(
         org_scoped(
             select(ConnectorHealth)
             .where(ConnectorHealth.deleted_at.is_(None))
-            .order_by(ConnectorHealth.created_at.desc()),
+            .order_by(desc(ConnectorHealth.created_at))
+            .limit(limit)
+            .offset(offset),
             context.current_org_id,
             ConnectorHealth,
         )
     ).all()
-    return [
-        ConnectorHealthResponse(
-            id=row.id,
-            org_id=row.org_id,
-            provider=row.provider,
-            account_ref=row.account_ref,
-            last_ok_at=row.last_ok_at,
-            last_error_at=row.last_error_at,
-            last_error_msg=row.last_error_msg,
-            consecutive_failures=row.consecutive_failures,
-        )
-        for row in rows
-    ]
+    return [_serialize_health(row) for row in rows]

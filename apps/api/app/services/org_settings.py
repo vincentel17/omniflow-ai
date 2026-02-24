@@ -19,6 +19,14 @@ DEFAULT_ORG_SETTINGS: dict[str, Any] = {
     "enable_seo_generation": True,
     "enable_review_response_drafts": True,
     "connector_mode": "mock",
+    "providers_enabled_json": {
+        "gbp_publish_enabled": False,
+        "meta_publish_enabled": False,
+        "linkedin_publish_enabled": False,
+        "gbp_inbox_enabled": False,
+        "meta_inbox_enabled": False,
+        "linkedin_inbox_enabled": False,
+    },
     "ai_mode": "mock",
     "max_auto_approve_tier": 1,
 }
@@ -38,6 +46,17 @@ def _safe_tier(value: Any, fallback: int) -> int:
     if isinstance(value, int):
         return max(0, min(4, value))
     return fallback
+
+
+def _safe_provider_flags(value: Any) -> dict[str, bool]:
+    defaults = dict(DEFAULT_ORG_SETTINGS["providers_enabled_json"])
+    if not isinstance(value, dict):
+        return defaults
+    normalized: dict[str, bool] = {}
+    for key, default in defaults.items():
+        raw = value.get(key)
+        normalized[key] = raw if isinstance(raw, bool) else bool(default)
+    return normalized
 
 
 def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -69,6 +88,7 @@ def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
         source.get("connector_mode"),
         settings.connector_mode if settings.connector_mode in {"mock", "live"} else "mock",
     )
+    normalized["providers_enabled_json"] = _safe_provider_flags(source.get("providers_enabled_json"))
     normalized["ai_mode"] = _safe_mode(
         source.get("ai_mode"),
         settings.ai_mode if settings.ai_mode in {"mock", "live"} else "mock",
@@ -126,3 +146,31 @@ def ai_mode_for_org(db: Session, org_id: uuid.UUID) -> str:
 def assert_feature_enabled(db: Session, org_id: uuid.UUID, feature_key: str, detail: str) -> None:
     if not is_feature_enabled(db=db, org_id=org_id, key=feature_key, fallback=False):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
+_PROVIDER_PREFIX = {
+    "google-business-profile": "gbp",
+    "meta": "meta",
+    "linkedin": "linkedin",
+}
+
+
+def provider_enabled_for_org(
+    db: Session,
+    org_id: uuid.UUID,
+    provider: str,
+    operation: str,
+) -> bool:
+    payload = get_org_settings_payload(db=db, org_id=org_id)
+    if _safe_mode(payload.get("connector_mode"), settings.connector_mode) != "live":
+        return False
+    prefix = _PROVIDER_PREFIX.get(provider)
+    if prefix is None:
+        return False
+    op = "publish" if operation == "publish" else "inbox"
+    key = f"{prefix}_{op}_enabled"
+    providers_enabled = payload.get("providers_enabled_json")
+    if not isinstance(providers_enabled, dict):
+        return False
+    value = providers_enabled.get(key)
+    return value is True

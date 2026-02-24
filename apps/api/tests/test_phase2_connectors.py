@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.main import app
 from app.models import AuditLog, OAuthToken, Role
-from app.services.connector_manager import get_publisher
+from app.services.connector_manager import _breaker_state, get_publisher
+from app.services.live_publishers import map_provider_error
 from app.services.oauth_state import consume_oauth_state, create_oauth_state
 from app.services.token_vault import decrypt_token, encrypt_token
 from app.settings import settings
@@ -59,6 +60,38 @@ def test_connector_manager_returns_mock_in_mock_mode() -> None:
     assert "external_id" in result
 
 
+def test_connector_manager_forces_mock_when_provider_live_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.connector_manager.provider_enabled_for_org", lambda **_kwargs: False)
+    publisher = get_publisher(
+        "meta",
+        uuid.UUID("22222222-2222-2222-2222-222222222222"),
+        "acct-disabled",
+        db=object(),
+    )
+    result = publisher.publish_post({"channel": "meta", "text": "test"})
+    assert result["status"] == "published"
+    assert str(result["external_id"]).startswith("mock-")
+
+
+def test_breaker_state_threshold_logic() -> None:
+    assert _breaker_state(None, threshold=3) == "closed"
+
+    class _Health:
+        consecutive_failures = 2
+
+    assert _breaker_state(_Health(), threshold=3) == "closed"
+    _Health.consecutive_failures = 3
+    assert _breaker_state(_Health(), threshold=3) == "open"
+
+
+def test_provider_error_taxonomy_mapping() -> None:
+    assert map_provider_error(401).category == "auth"
+    assert map_provider_error(429).category == "rate_limit"
+    assert map_provider_error(400).category == "validation"
+    assert map_provider_error(500).category == "network"
+    assert map_provider_error(None).category == "unknown"
+
+
 @pytest.mark.integration
 async def test_connector_link_stores_encrypted_token_and_lists_account(
     seeded_context: dict[str, str],
@@ -101,6 +134,38 @@ async def test_connector_link_stores_encrypted_token_and_lists_account(
     assert token is not None
     assert "mock-access-linkedin-acct-1" not in token.access_token_enc
     assert decrypt_token(token.access_token_enc) == "mock-access-linkedin-acct-1"
+
+
+@pytest.mark.integration
+async def test_connector_diagnostics_sanitized_fields(
+    seeded_context: dict[str, str],
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        start = await client.post(
+            "/connectors/meta/start",
+            headers=seeded_context,
+            json={"account_ref": "acct-diagnostics", "display_name": "Meta Diagnostics"},
+        )
+        state = start.json()["state"]
+        callback = await client.post(
+            "/connectors/meta/callback",
+            headers=seeded_context,
+            json={
+                "state": state,
+                "code": "mock",
+                "account_ref": "acct-diagnostics",
+                "display_name": "Meta Diagnostics",
+            },
+        )
+        account_id = callback.json()["id"]
+
+        diag = await client.get(f"/connectors/accounts/{account_id}/diagnostics", headers=seeded_context)
+        assert diag.status_code == 200
+        payload = diag.json()
+        assert payload["provider"] == "meta"
+        assert payload["account_ref"] == "acct-diagnostics"
+        assert payload["mode_effective"] in {"mock", "live"}
+        assert "token" not in json.dumps(payload).lower()
 
 
 @pytest.mark.integration
@@ -181,4 +246,3 @@ async def test_disconnect_connector_soft_deletes_token_and_writes_audit(
     ).all()
     assert len(audit) == 1
     assert json.loads(json.dumps(audit[0].metadata_json))["provider"] == "google-business-profile"
-

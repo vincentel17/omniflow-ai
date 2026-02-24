@@ -1,4 +1,4 @@
-import os
+﻿import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -34,6 +34,8 @@ from app.models import (
     RiskTier,
     SLAConfig,
 )
+from app.services.connector_manager import get_publisher
+from app.services.live_publishers import ConnectorError
 
 broker_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 app = Celery("omniflow-worker", broker=broker_url, backend=broker_url)
@@ -69,6 +71,26 @@ def _org_connector_mode(db: Session, org_id: uuid.UUID) -> str:
     return os.getenv("CONNECTOR_MODE", "mock")
 
 
+_PROVIDER_PREFIX = {
+    "google-business-profile": "gbp",
+    "meta": "meta",
+    "linkedin": "linkedin",
+}
+
+
+def _provider_publish_enabled(db: Session, org_id: uuid.UUID, provider: str) -> bool:
+    payload = _org_settings_payload(db=db, org_id=org_id)
+    if payload.get("connector_mode") != "live":
+        return False
+    prefix = _PROVIDER_PREFIX.get(provider)
+    if prefix is None:
+        return False
+    providers_enabled = payload.get("providers_enabled_json")
+    if not isinstance(providers_enabled, dict):
+        return False
+    return providers_enabled.get(f"{prefix}_publish_enabled") is True
+
+
 def _record_connector_failure(db: Session, org_id: uuid.UUID, provider: str, account_ref: str, error_message: str) -> None:
     health = db.scalar(
         select(ConnectorHealth).where(
@@ -97,6 +119,33 @@ def _record_connector_failure(db: Session, org_id: uuid.UUID, provider: str, acc
         )
         if account is not None:
             account.status = "circuit_open"
+
+
+
+
+def _connector_breaker_open(db: Session, org_id: uuid.UUID, provider: str, account_ref: str) -> bool:
+    account = db.scalar(
+        select(ConnectorAccount).where(
+            ConnectorAccount.org_id == org_id,
+            ConnectorAccount.provider == provider,
+            ConnectorAccount.account_ref == account_ref,
+            ConnectorAccount.deleted_at.is_(None),
+        )
+    )
+    if account is None:
+        return False
+    if account.status == "circuit_open":
+        return True
+    health = db.scalar(
+        select(ConnectorHealth).where(
+            ConnectorHealth.org_id == org_id,
+            ConnectorHealth.provider == provider,
+            ConnectorHealth.account_ref == account_ref,
+            ConnectorHealth.deleted_at.is_(None),
+        )
+    )
+    threshold = int(os.getenv("CONNECTOR_CIRCUIT_BREAKER_THRESHOLD", "3"))
+    return health is not None and int(health.consecutive_failures or 0) >= threshold
 
 
 def _write_system_event(
@@ -191,16 +240,90 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
         )
 
         try:
-            connector_mode = _org_connector_mode(db=db, org_id=job.org_id)
-            if connector_mode != "mock":
-                raise NotImplementedError("live connector publish is not implemented")
-            external_id = _publish_mock(provider=job.provider, account_ref=job.account_ref, content=content)
+            live_enabled = _provider_publish_enabled(db=db, org_id=job.org_id, provider=job.provider)
+            if not live_enabled:
+                job.status = PublishJobStatus.FAILED
+                content.status = ContentItemStatus.FAILED
+                job.last_error = "LIVE_DISABLED"
+                _write_system_event(
+                    db=db,
+                    org_id=job.org_id,
+                    channel=content.channel,
+                    event_type="CONNECTOR_LIVE_CALL_FAIL",
+                    content_id=content.id,
+                    payload={"publish_job_id": str(job.id), "reason": "LIVE_DISABLED"},
+                )
+                _write_system_audit(
+                    db=db,
+                    org_id=job.org_id,
+                    action="publish.live_blocked",
+                    target_type="publish_job",
+                    target_id=str(job.id),
+                    risk_tier=content.risk_tier,
+                    metadata={"reason": "LIVE_DISABLED"},
+                )
+                db.commit()
+                return "live_disabled"
+
+            if _connector_breaker_open(db=db, org_id=job.org_id, provider=job.provider, account_ref=job.account_ref):
+                job.status = PublishJobStatus.FAILED
+                content.status = ContentItemStatus.FAILED
+                job.last_error = "BREAKER_TRIPPED"
+                _write_system_event(
+                    db=db,
+                    org_id=job.org_id,
+                    channel=content.channel,
+                    event_type="CONNECTOR_LIVE_CALL_FAIL",
+                    content_id=content.id,
+                    payload={"publish_job_id": str(job.id), "reason": "BREAKER_TRIPPED"},
+                )
+                _write_system_audit(
+                    db=db,
+                    org_id=job.org_id,
+                    action="publish.live_blocked",
+                    target_type="publish_job",
+                    target_id=str(job.id),
+                    risk_tier=content.risk_tier,
+                    metadata={"reason": "BREAKER_TRIPPED"},
+                )
+                db.commit()
+                return "breaker_tripped"
+
+            _write_system_event(
+                db=db,
+                org_id=job.org_id,
+                channel=content.channel,
+                event_type="CONNECTOR_LIVE_CALL_ATTEMPT",
+                content_id=content.id,
+                payload={"publish_job_id": str(job.id), "provider": job.provider},
+            )
+
+            publisher = get_publisher(provider=job.provider, org_id=job.org_id, account_ref=job.account_ref, db=db)
+            result = publisher.publish_post(
+                {
+                    "channel": content.channel,
+                    "text": content.text_rendered,
+                    "media_urls": content.media_refs_json,
+                    "link_url": content.link_url,
+                    "tags": content.tags_json,
+                    "account_ref": job.account_ref,
+                }
+            )
+            external_id = str(result.get("external_id") or _publish_mock(provider=job.provider, account_ref=job.account_ref, content=content))
 
             job.status = PublishJobStatus.SUCCEEDED
             job.external_id = external_id
             job.published_at = _now()
             job.last_error = None
             content.status = ContentItemStatus.PUBLISHED
+            _write_system_event(
+                db=db,
+                org_id=job.org_id,
+                channel=content.channel,
+                event_type="CONNECTOR_LIVE_CALL_SUCCESS",
+                content_id=content.id,
+                payload={"publish_job_id": str(job.id), "provider": job.provider},
+            )
             _write_system_event(
                 db=db,
                 org_id=job.org_id,
@@ -220,6 +343,43 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
             )
             db.commit()
             return "succeeded"
+        except ConnectorError as exc:  # pragma: no cover - retry path
+            job.last_error = str(exc)[:500]
+            _record_connector_failure(
+                db=db,
+                org_id=job.org_id,
+                provider=job.provider,
+                account_ref=job.account_ref,
+                error_message=job.last_error,
+            )
+            if exc.category in {"auth", "reauth_required"}:
+                account = db.scalar(
+                    select(ConnectorAccount).where(
+                        ConnectorAccount.org_id == job.org_id,
+                        ConnectorAccount.provider == job.provider,
+                        ConnectorAccount.account_ref == job.account_ref,
+                        ConnectorAccount.deleted_at.is_(None),
+                    )
+                )
+                if account is not None:
+                    account.status = "reauth_required"
+                _write_system_event(
+                    db=db,
+                    org_id=job.org_id,
+                    channel=content.channel,
+                    event_type="CONNECTOR_REAUTH_REQUIRED",
+                    content_id=content.id,
+                    payload={"publish_job_id": str(job.id), "provider": job.provider},
+                )
+            _write_system_event(
+                db=db,
+                org_id=job.org_id,
+                channel=content.channel,
+                event_type="CONNECTOR_LIVE_CALL_FAIL",
+                content_id=content.id,
+                payload={"publish_job_id": str(job.id), "error_category": exc.category},
+            )
+            raise
         except Exception as exc:  # pragma: no cover - retry path
             job.last_error = str(exc)[:500]
             _record_connector_failure(
@@ -479,3 +639,4 @@ def reputation_sla_tick() -> int:
             created += 1
         db.commit()
     return created
+
