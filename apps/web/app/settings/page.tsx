@@ -15,9 +15,9 @@ export default function SettingsPage() {
             Brand Profile
           </Link>
         </li>
-        <li>
-          <Link className="underline" href="/settings/sla">
-            SLA Settings
+                <li>
+          <Link className="underline" href="/settings/integrations">
+            Integrations
           </Link>
         </li>
         <li>
@@ -64,3 +64,4 @@ export default function SettingsPage() {
     </main>
   );
 }
+
