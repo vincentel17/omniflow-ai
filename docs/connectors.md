@@ -1,44 +1,56 @@
-# Connectors Architecture (Phase 2)
+﻿# Connectors Architecture
 
 ## Goals
 
-- Keep app logic vendor-agnostic via stable contracts.
-- Run safely in `CONNECTOR_MODE=mock` by default.
-- Enforce strict org scoping for all connector resources.
-- Encrypt tokens at rest and never expose them through API responses.
+- Keep app logic vendor-agnostic via stable contracts and normalized DTOs.
+- Keep CI deterministic with `CONNECTOR_MODE=mock` and provider flags disabled.
+- Enforce org-scoped connector operations, encrypted tokens, and audited actions.
 
-## Components
+## Runtime Control Model
 
-- `apps/api/app/routers/connectors.py`
-  - OAuth broker endpoints and connector account/health APIs.
-- `apps/api/app/services/token_vault.py`
-  - Symmetric encryption/decryption and token persistence.
-- `apps/api/app/services/oauth_state.py`
-  - CSRF state generation/consumption in Redis.
-- `apps/api/app/services/connector_manager.py`
-  - Provider manager with mock-first publisher and health check surface.
+Connector behavior is controlled by org settings:
 
-## Runtime Modes
+- `connector_mode`: `mock` or `live`
+- `providers_enabled_json` flags:
+  - `gbp_publish_enabled`, `meta_publish_enabled`, `linkedin_publish_enabled`
+  - `gbp_inbox_enabled`, `meta_inbox_enabled`, `linkedin_inbox_enabled`
 
-- `CONNECTOR_MODE=mock` (default)
-  - No external provider calls.
-  - Callback stores deterministic mock tokens (encrypted).
-- `CONNECTOR_MODE=live`
-  - Reserved for provider-specific implementations.
-  - Current behavior returns `501 Not Implemented` for token exchange.
+If mode is not `live` or a provider flag is off, the connector manager forces mock adapter behavior and records an audit event (`LIVE_BLOCKED`).
 
-## Security Notes
+## OAuth Broker Guardrails
 
-- Token encryption key: `TOKEN_ENCRYPTION_KEY` (Fernet key).
-- Access/refresh token plaintext is never stored in DB.
-- Connector APIs are tenant-scoped via request context org id.
-- AuditLog and Event rows are written for link/unlink/health operations.
+- OAuth state is stored in Redis with TTL and consumed once.
+- Redirect URI must match `ALLOWED_OAUTH_REDIRECT_URIS`.
+- Granted scopes are persisted per account and validated in diagnostics.
+- Tokens are encrypted at rest using `TOKEN_ENCRYPTION_KEY` and are never returned by API.
 
-## How to Add a Provider Safely
+## Diagnostics and Recovery
 
-1. Add provider id to `SUPPORTED_PROVIDERS`.
-2. Add env-based config checks in `_provider_is_configured`.
-3. Implement live token exchange behind `CONNECTOR_MODE=live`.
-4. Keep normalized response models stable; isolate vendor fields inside adapter code.
-5. Add/extend contract and integration tests for tenant isolation and token handling.
+Use:
 
+- `GET /connectors/accounts/{id}/diagnostics`
+- `POST /connectors/accounts/{id}/healthcheck`
+- `POST /connectors/accounts/{id}/breaker/reset`
+- `POST /connectors/accounts/{id}/revoke`
+
+Diagnostics include sanitized health and breaker data only. No token values are exposed.
+
+## Live Provider Status
+
+- GBP: minimal live publish path implemented with retry/taxonomy scaffolding.
+- Meta: minimal live publish path scaffolded.
+- LinkedIn: minimal live publish path scaffolded.
+
+If provider API access is missing, diagnostics and error taxonomy return a safe unsupported/auth-required status without breaking the publish pipeline.
+
+## Error Taxonomy
+
+Provider errors are normalized into:
+
+- `auth`
+- `rate_limit`
+- `validation`
+- `network`
+- `unknown`
+
+Worker publish flow records connector live attempt/success/fail events using sanitized category values.
