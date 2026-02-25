@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import random
 import time
@@ -10,8 +10,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import ConnectorHealth, OAuthToken
-from ..services.token_vault import get_access_token
+from ..models import ConnectorAccount, ConnectorHealth, OAuthToken
+from ..services.token_vault import refresh_if_needed
+from ..settings import settings
 
 
 class ConnectorError(Exception):
@@ -34,6 +35,30 @@ class LiveUnsupportedError(ConnectorError):
 class ProviderResult:
     external_id: str
     raw_ref: str
+
+
+_REQUIRED_SCOPES: dict[str, dict[str, set[str]]] = {
+    "google-business-profile": {
+        "publish": {"business.manage"},
+        "inbox": {"business.manage"},
+    },
+    "meta": {
+        "publish": {"pages_manage_posts"},
+        "inbox": {"pages_messaging"},
+    },
+    "linkedin": {
+        "publish": {"w_member_social"},
+        "inbox": {"r_organization_social"},
+    },
+}
+
+
+def missing_required_scopes(provider: str, operation: str, token_scopes: list[str]) -> list[str]:
+    required = _REQUIRED_SCOPES.get(provider, {}).get(operation, set())
+    if not required:
+        return []
+    available = set(token_scopes)
+    return sorted(scope for scope in required if scope not in available)
 
 
 def map_provider_error(
@@ -60,10 +85,38 @@ class BaseLivePublisher:
         self.org_id = org_id
         self.account_ref = account_ref
 
+    def _account_row(self) -> ConnectorAccount | None:
+        return self.db.scalar(
+            select(ConnectorAccount).where(
+                ConnectorAccount.org_id == self.org_id,
+                ConnectorAccount.provider == self.provider,
+                ConnectorAccount.account_ref == self.account_ref,
+                ConnectorAccount.deleted_at.is_(None),
+            )
+        )
+
+    def _mark_refresh_failure(self, message: str) -> None:
+        health = self._load_health()
+        if health is None:
+            health = ConnectorHealth(org_id=self.org_id, provider=self.provider, account_ref=self.account_ref)
+            self.db.add(health)
+        health.last_error_at = datetime.now(UTC)
+        health.last_error_msg = message[:500]
+        health.last_http_status = 401
+        health.consecutive_failures = max(
+            int(health.consecutive_failures or 0) + 1,
+            int(settings.connector_circuit_breaker_threshold),
+        )
+
+        account = self._account_row()
+        if account is not None:
+            account.status = "circuit_open"
+
     def _access_token(self) -> str:
-        token = get_access_token(self.db, self.org_id, self.provider, self.account_ref)
+        token = refresh_if_needed(self.db, self.org_id, self.provider, self.account_ref)
         if not token:
-            raise ConnectorError("auth", "missing access token", status_code=401)
+            self._mark_refresh_failure("token refresh failed; re-auth required")
+            raise ConnectorError("reauth_required", "token refresh failed; re-auth required", status_code=401)
         return token
 
     def _load_health(self) -> ConnectorHealth | None:

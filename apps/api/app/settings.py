@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     connector_mode: str = "mock"
     connector_circuit_breaker_threshold: int = 3
+    connector_circuit_breaker_cooldown_seconds: int = 300
     token_encryption_key: str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     oauth_redirect_uri: str = "http://localhost:3000/api/auth/callback"
     allowed_oauth_redirect_uris: str = "http://localhost:3000/api/auth/callback"
@@ -52,3 +53,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+

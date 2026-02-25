@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.models import AuditLog, OAuthToken, Role
 from app.services.connector_manager import _breaker_state, get_publisher
-from app.services.live_publishers import map_provider_error
+from app.services.live_publishers import map_provider_error, missing_required_scopes
 from app.services.oauth_state import consume_oauth_state, create_oauth_state
 from app.services.token_vault import decrypt_token, encrypt_token
 from app.settings import settings
@@ -78,10 +79,20 @@ def test_breaker_state_threshold_logic() -> None:
 
     class _Health:
         consecutive_failures = 2
+        last_error_at = None
 
     assert _breaker_state(_Health(), threshold=3) == "closed"
     _Health.consecutive_failures = 3
+    _Health.last_error_at = datetime.now(UTC)
     assert _breaker_state(_Health(), threshold=3) == "open"
+
+
+def test_breaker_state_transitions_to_half_open_after_cooldown() -> None:
+    class _Health:
+        consecutive_failures = 3
+        last_error_at = datetime.now(UTC) - timedelta(seconds=600)
+
+    assert _breaker_state(_Health(), threshold=3) == "half_open"
 
 
 def test_provider_error_taxonomy_mapping() -> None:
@@ -90,6 +101,11 @@ def test_provider_error_taxonomy_mapping() -> None:
     assert map_provider_error(400).category == "validation"
     assert map_provider_error(500).category == "network"
     assert map_provider_error(None).category == "unknown"
+
+
+def test_missing_required_scopes_mapping() -> None:
+    assert missing_required_scopes("google-business-profile", "publish", []) == ["business.manage"]
+    assert missing_required_scopes("meta", "publish", ["pages_manage_posts"]) == []
 
 
 @pytest.mark.integration
@@ -246,3 +262,4 @@ async def test_disconnect_connector_soft_deletes_token_and_writes_audit(
     ).all()
     assert len(audit) == 1
     assert json.loads(json.dumps(audit[0].metadata_json))["provider"] == "google-business-profile"
+

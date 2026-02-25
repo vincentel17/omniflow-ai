@@ -1,4 +1,4 @@
-﻿import os
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -134,8 +134,7 @@ def _connector_breaker_open(db: Session, org_id: uuid.UUID, provider: str, accou
     )
     if account is None:
         return False
-    if account.status == "circuit_open":
-        return True
+
     health = db.scalar(
         select(ConnectorHealth).where(
             ConnectorHealth.org_id == org_id,
@@ -144,9 +143,21 @@ def _connector_breaker_open(db: Session, org_id: uuid.UUID, provider: str, accou
             ConnectorHealth.deleted_at.is_(None),
         )
     )
-    threshold = int(os.getenv("CONNECTOR_CIRCUIT_BREAKER_THRESHOLD", "3"))
-    return health is not None and int(health.consecutive_failures or 0) >= threshold
 
+    threshold = int(os.getenv("CONNECTOR_CIRCUIT_BREAKER_THRESHOLD", "3"))
+    cooldown_seconds = int(os.getenv("CONNECTOR_CIRCUIT_BREAKER_COOLDOWN_SECONDS", "300"))
+    failures = int(health.consecutive_failures or 0) if health is not None else 0
+
+    if account.status == "circuit_open" or failures >= threshold:
+        if health is None or health.last_error_at is None:
+            return True
+        cooldown_elapsed = _now() >= health.last_error_at + timedelta(seconds=max(1, cooldown_seconds))
+        if cooldown_elapsed:
+            account.status = "linked"
+            health.consecutive_failures = 0
+            return False
+        return True
+    return False
 
 def _write_system_event(
     db: Session,

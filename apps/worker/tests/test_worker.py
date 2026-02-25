@@ -82,3 +82,29 @@ def test_scheduler_tick_skips_when_auto_posting_disabled(monkeypatch) -> None:
 
     assert worker_main.scheduler_tick() == 0
     assert delay_counter.calls == 0
+
+
+def test_connector_breaker_allows_half_open_after_cooldown() -> None:
+    now = worker_main._now()
+    account = SimpleNamespace(status="circuit_open")
+    health = SimpleNamespace(consecutive_failures=3, last_error_at=now - worker_main.timedelta(seconds=601))
+
+    class _DummySession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def scalar(self, stmt):  # noqa: ANN001
+            self.calls += 1
+            return account if self.calls == 1 else health
+
+    db = _DummySession()
+    is_open = worker_main._connector_breaker_open(
+        db=db,
+        org_id=uuid.uuid4(),
+        provider="meta",
+        account_ref="acct-1",
+    )
+
+    assert is_open is False
+    assert account.status == "linked"
+    assert health.consecutive_failures == 0
