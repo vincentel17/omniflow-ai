@@ -9,7 +9,7 @@ export default async function AnalyticsFunnelPage() {
   const data = await apiFetch<FunnelResponse>("/analytics/funnel");
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Funnel Analytics</h1>
       <p className="mt-2 text-slate-400">Inbox-to-outcome conversion path.</p>
       <section className="mt-6 rounded border border-slate-800 p-4">
@@ -25,3 +25,4 @@ export default async function AnalyticsFunnelPage() {
     </main>
   );
 }
+

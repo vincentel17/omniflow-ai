@@ -12,7 +12,7 @@ export default async function AnalyticsContentPage() {
   const data = await apiFetch<ContentResponse>("/analytics/content?group_by=day");
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Content Analytics</h1>
       <p className="mt-2 text-slate-400">Publish outcomes and attributed clicks/leads by content item.</p>
       <section className="mt-6 rounded border border-slate-800 p-4">
@@ -36,3 +36,4 @@ export default async function AnalyticsContentPage() {
     </main>
   );
 }
+

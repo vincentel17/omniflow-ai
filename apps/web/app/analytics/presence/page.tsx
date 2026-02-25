@@ -15,7 +15,7 @@ export default async function AnalyticsPresencePage() {
   const data = await apiFetch<PresenceResponse>("/analytics/presence?group_by=week");
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Presence Trends</h1>
       <p className="mt-2 text-slate-400">Audit score trajectory and open findings.</p>
       <section className="mt-6 rounded border border-slate-800 p-4">
@@ -27,3 +27,4 @@ export default async function AnalyticsPresencePage() {
     </main>
   );
 }
+

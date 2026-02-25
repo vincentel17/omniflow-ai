@@ -29,7 +29,7 @@ async function getCurrentPack(): Promise<string | null> {
 export default async function VerticalSettingsPage() {
   const [packs, currentPack] = await Promise.all([getPacks(), getCurrentPack()]);
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Vertical Packs</h1>
       <p className="mt-2 text-slate-300">Select the active pack for the current organization.</p>
       <p className="mt-4 text-sm text-slate-400">Current: {currentPack ?? "none selected"}</p>
@@ -37,3 +37,4 @@ export default async function VerticalSettingsPage() {
     </main>
   );
 }
+

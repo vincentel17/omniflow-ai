@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 import { apiFetch } from "../../../../lib/api";
 import { IntegrationDiagnosticsClient } from "./integration-diagnostics-client";
@@ -33,7 +33,7 @@ export default async function IntegrationDiagnosticsPage({ params }: { params: P
   const diagnostics = await getDiagnostics(resolvedParams.accountId);
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <Link className="text-sm underline" href="/settings/integrations">
         Back to Integrations
       </Link>

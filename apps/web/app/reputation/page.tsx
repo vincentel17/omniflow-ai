@@ -21,10 +21,11 @@ export default async function ReputationPage() {
   const reviews = await apiFetch<Review[]>("/reputation/reviews?limit=50&offset=0");
   const campaigns = await apiFetch<Campaign[]>("/reputation/campaigns?limit=50&offset=0");
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Reputation Manager</h1>
       <p className="mt-2 text-slate-400">Import reviews, score sentiment, draft responses, and run request campaigns.</p>
       <ReputationConsole initialReviews={reviews} initialCampaigns={campaigns} />
     </main>
   );
 }
+

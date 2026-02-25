@@ -16,10 +16,11 @@ async function getCampaigns(): Promise<Campaign[]> {
 export default async function CampaignsPage() {
   const campaigns = await getCampaigns();
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Campaign Planner</h1>
       <p className="mt-2 text-slate-300">Generate weekly plan JSON and create content items from it.</p>
       <CampaignPlanner campaigns={campaigns} />
     </main>
   );
 }
+

@@ -10,7 +10,7 @@ export default async function AnalyticsWorkloadPage() {
   const data = await apiFetch<WorkloadResponse>("/analytics/workload");
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Workload Reduction Index</h1>
       <p className="mt-2 text-slate-400">Estimated operator time saved from automation actions.</p>
       <section className="mt-6 rounded border border-slate-800 p-4">
@@ -24,3 +24,4 @@ export default async function AnalyticsWorkloadPage() {
     </main>
   );
 }
+

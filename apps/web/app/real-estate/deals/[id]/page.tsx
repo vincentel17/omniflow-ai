@@ -42,7 +42,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   ]);
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Deal Detail</h1>
       <p className="mt-2 text-slate-400">
         {deal.deal_type} | {deal.pipeline_stage} | {deal.status}

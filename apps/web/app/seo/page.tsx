@@ -13,10 +13,11 @@ type WorkItem = {
 export default async function SEOPage() {
   const workItems = await apiFetch<WorkItem[]>("/seo/work-items?limit=50&offset=0");
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">SEO Engine</h1>
       <p className="mt-2 text-slate-400">Generate plans, create work items, draft content, and approve.</p>
       <SEOConsole initialWorkItems={workItems} />
     </main>
   );
 }
+

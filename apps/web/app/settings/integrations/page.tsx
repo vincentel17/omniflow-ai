@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { IntegrationsClient } from "./integrations-client";
@@ -37,7 +37,7 @@ export default async function IntegrationsPage() {
   const [accounts, opsSettings] = await Promise.all([getAccounts(), getOpsSettings()]);
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Integrations</h1>
       <p className="mt-2 text-slate-300">Manage connector mode, provider live flags, and account diagnostics.</p>
 
@@ -70,3 +70,4 @@ export default async function IntegrationsPage() {
     </main>
   );
 }
+

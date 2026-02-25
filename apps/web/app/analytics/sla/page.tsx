@@ -11,7 +11,7 @@ export default async function AnalyticsSLAPage() {
   const data = await apiFetch<SLAResponse>("/analytics/sla");
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">SLA Analytics</h1>
       <p className="mt-2 text-slate-400">Response-time performance and escalations.</p>
       <section className="mt-6 rounded border border-slate-800 p-4">
@@ -20,3 +20,4 @@ export default async function AnalyticsSLAPage() {
     </main>
   );
 }
+

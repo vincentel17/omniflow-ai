@@ -1,4 +1,4 @@
-﻿import { apiFetch } from "../../../lib/api";
+import { apiFetch } from "../../../lib/api";
 import { PublishJobsTable } from "./table";
 
 type PublishJob = {
@@ -32,7 +32,7 @@ export default async function PublishJobsPage() {
   const [jobs, settings] = await Promise.all([getJobs(), getOpsSettings()]);
   const liveMode = settings.connector_mode === "live";
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Publish Jobs</h1>
       <p className="mt-2 text-slate-300">Track queued and published content jobs.</p>
       <p className={`mt-3 rounded border px-3 py-2 text-sm ${liveMode ? "border-amber-500 text-amber-200" : "border-slate-700 text-slate-300"}`}>
@@ -42,3 +42,4 @@ export default async function PublishJobsPage() {
     </main>
   );
 }
+

@@ -19,10 +19,11 @@ async function getThreads(): Promise<Thread[]> {
 export default async function InboxPage() {
   const threads = await getThreads();
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Inbox</h1>
       <p className="mt-2 text-slate-300">Ingest interactions, review conversations, draft replies, and convert to leads.</p>
       <InboxConsole initialThreads={threads} />
     </main>
   );
 }
+

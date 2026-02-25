@@ -22,10 +22,11 @@ async function getProfile(): Promise<BrandProfile | null> {
 export default async function BrandSettingsPage() {
   const profile = await getProfile();
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Brand Profile</h1>
       <p className="mt-2 text-slate-300">Configure brand voice and approval thresholds.</p>
       <BrandProfileForm initial={profile} />
     </main>
   );
 }
+

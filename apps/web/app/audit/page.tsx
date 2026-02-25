@@ -15,7 +15,7 @@ async function getAuditLogs(): Promise<AuditRow[]> {
 export default async function AuditPage() {
   const entries = await getAuditLogs();
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Audit Log</h1>
       <ul className="mt-6 space-y-2">
         {entries.map((entry) => (
@@ -32,3 +32,4 @@ export default async function AuditPage() {
     </main>
   );
 }
+

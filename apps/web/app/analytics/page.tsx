@@ -18,7 +18,7 @@ export default async function AnalyticsOverviewPage() {
   const data = await apiFetch<OverviewResponse>("/analytics/overview");
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">Analytics Overview</h1>
       <p className="mt-2 text-slate-400">Attribution and operational ROI from unified internal events.</p>
       <nav className="mt-4 flex flex-wrap gap-4 text-sm text-slate-300">
@@ -72,3 +72,4 @@ export default async function AnalyticsOverviewPage() {
     </main>
   );
 }
+

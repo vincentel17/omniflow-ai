@@ -18,10 +18,11 @@ async function getSlaConfig(): Promise<SlaConfig | null> {
 export default async function SlaSettingsPage() {
   const initial = await getSlaConfig();
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-100">
+    <main className="page-shell">
       <h1 className="text-3xl font-semibold">SLA Settings</h1>
       <p className="mt-2 text-slate-300">Define response windows and escalation thresholds for inbound threads.</p>
       <SlaForm initial={initial} />
     </main>
   );
 }
+
