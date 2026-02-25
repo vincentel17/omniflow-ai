@@ -1,15 +1,26 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { AppShell } from "../components/app-shell";
+import { ToastProvider } from "../components/ui/toast";
 import { getDevContext } from "../lib/dev-context";
 import { getCurrentPackSlug } from "../lib/vertical-pack";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "OmniFlow AI",
   description: "Conversion-optimized AI-assisted revenue operations layer"
 };
+
+function envLabel(): string {
+  const env = (process.env.NODE_ENV ?? "development").toUpperCase();
+  if (env === "PRODUCTION") return "PROD";
+  if (env === "TEST") return "STAGING";
+  return "DEV";
+}
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const context = getDevContext();
@@ -17,26 +28,21 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const isRealEstate = packSlug === "real-estate";
 
   return (
-    <html lang="en">
-      <body>
-        <header className="border-b border-slate-800 bg-slate-950 px-6 py-4 text-slate-100">
-          <div className="mx-auto flex max-w-6xl items-center justify-between">
-            <nav className="flex gap-4 text-sm">
-              <Link href="/dashboard">Dashboard</Link>
-              <Link href="/settings">Settings</Link>
-              <Link href="/settings/verticals">Verticals</Link>
-              <Link href="/events">Events</Link>
-              <Link href="/audit">Audit</Link>
-              {isRealEstate ? <Link href="/real-estate/deals">Real Estate</Link> : null}
-            </nav>
-            <p className="text-xs text-slate-400">
-              org: {context.orgId} | role: {context.role}
-            </p>
-          </div>
-        </header>
-        {children}
+    <html className="dark" lang="en" suppressHydrationWarning>
+      <body className={inter.variable}>
+        <ToastProvider>
+          <AppShell
+            aiMode={process.env.NEXT_PUBLIC_AI_MODE ?? "mock"}
+            connectorMode={process.env.NEXT_PUBLIC_CONNECTOR_MODE ?? "mock"}
+            envLabel={envLabel()}
+            isRealEstate={isRealEstate}
+            orgId={context.orgId}
+            role={context.role}
+          >
+            {children}
+          </AppShell>
+        </ToastProvider>
       </body>
     </html>
   );
 }
-

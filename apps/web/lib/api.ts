@@ -1,7 +1,15 @@
 import { getApiBaseUrl, getDevContext } from "./dev-context";
 
+export type ApiMethod = "GET" | "POST" | "PATCH" | "DELETE";
+
+export type ApiError = {
+  status: number;
+  message: string;
+  path: string;
+};
+
 type FetchOptions = {
-  method?: "GET" | "POST";
+  method?: ApiMethod;
   body?: unknown;
 };
 
@@ -20,7 +28,21 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed (${response.status}) for ${path}`);
+    let message = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        message = payload.detail;
+      }
+    } catch {
+      // Ignore parse failures and keep generic message.
+    }
+
+    throw <ApiError>{
+      status: response.status,
+      message,
+      path
+    };
   }
 
   return (await response.json()) as T;
