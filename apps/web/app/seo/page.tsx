@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+
 import { SEOConsole } from "./seo-console";
 
 type WorkItem = {
@@ -11,7 +12,7 @@ type WorkItem = {
 };
 
 export default async function SEOPage() {
-  const workItems = await apiFetch<WorkItem[]>("/seo/work-items?limit=50&offset=0");
+  const workItems = await apiFetch<WorkItem[]>("/seo/work-items?limit=50&offset=0").catch(() => []);
   return (
     <main className="page-shell">
       <h1 className="text-3xl font-semibold">SEO Engine</h1>
@@ -20,4 +21,3 @@ export default async function SEOPage() {
     </main>
   );
 }
-

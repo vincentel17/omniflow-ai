@@ -9,7 +9,11 @@ type AuditRow = {
 };
 
 async function getAuditLogs(): Promise<AuditRow[]> {
-  return apiFetch<AuditRow[]>("/audit?limit=50&offset=0");
+  try {
+    return await apiFetch<AuditRow[]>("/audit?limit=50&offset=0");
+  } catch {
+    return [];
+  }
 }
 
 export default async function AuditPage() {
@@ -24,7 +28,7 @@ export default async function AuditPage() {
               <span className="font-semibold">{entry.action}</span> on {entry.target_type}
             </p>
             <p className="text-slate-400">
-              {entry.target_id} • {new Date(entry.created_at).toLocaleString()}
+              {entry.target_id} - {new Date(entry.created_at).toLocaleString()}
             </p>
           </li>
         ))}
@@ -32,4 +36,3 @@ export default async function AuditPage() {
     </main>
   );
 }
-

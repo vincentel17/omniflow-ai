@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+
 import { LeadsConsole } from "./console";
 
 type Lead = {
@@ -13,7 +14,11 @@ type Lead = {
 };
 
 async function getLeads(): Promise<Lead[]> {
-  return apiFetch<Lead[]>("/leads?limit=50&offset=0");
+  try {
+    return await apiFetch<Lead[]>("/leads?limit=50&offset=0");
+  } catch {
+    return [];
+  }
 }
 
 export default async function LeadsPage() {
@@ -26,4 +31,3 @@ export default async function LeadsPage() {
     </main>
   );
 }
-

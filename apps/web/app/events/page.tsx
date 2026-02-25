@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+
 import { EventsTable } from "./events-table";
 
 type EventRow = {
@@ -10,7 +11,11 @@ type EventRow = {
 };
 
 async function getEvents(): Promise<EventRow[]> {
-  return apiFetch<EventRow[]>("/events?limit=200&offset=0");
+  try {
+    return await apiFetch<EventRow[]>("/events?limit=200&offset=0");
+  } catch {
+    return [];
+  }
 }
 
 export default async function EventsPage() {

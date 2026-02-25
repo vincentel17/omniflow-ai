@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+
 import { PresenceConsole } from "./presence-console";
 
 type AuditRun = {
@@ -25,9 +26,11 @@ type PresenceTask = {
 };
 
 export default async function PresencePage() {
-  const latest = await apiFetch<AuditRun | null>("/presence");
-  const findings = await apiFetch<Finding[]>("/presence/findings?limit=20&offset=0");
-  const tasks = await apiFetch<PresenceTask[]>("/presence/tasks?limit=20&offset=0");
+  const [latest, findings, tasks] = await Promise.all([
+    apiFetch<AuditRun | null>("/presence").catch(() => null),
+    apiFetch<Finding[]>("/presence/findings?limit=20&offset=0").catch(() => []),
+    apiFetch<PresenceTask[]>("/presence/tasks?limit=20&offset=0").catch(() => [])
+  ]);
 
   return (
     <main className="page-shell">
@@ -37,4 +40,3 @@ export default async function PresencePage() {
     </main>
   );
 }
-

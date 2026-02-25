@@ -14,8 +14,20 @@ type OverviewResponse = {
   top_channels: Array<{ channel: string; content_items: number; clicks: number; leads: number }>;
 };
 
+const fallbackOverview: OverviewResponse = {
+  totals: {},
+  avg_response_time_minutes: null,
+  presence_overall_score_latest: null,
+  staff_reduction_index: {
+    estimated_minutes_saved_total: 0,
+    breakdown_by_action_type: {},
+    automation_coverage_rate: 0
+  },
+  top_channels: []
+};
+
 export default async function AnalyticsOverviewPage() {
-  const data = await apiFetch<OverviewResponse>("/analytics/overview");
+  const data = await apiFetch<OverviewResponse>("/analytics/overview").catch(() => fallbackOverview);
 
   return (
     <main className="page-shell">
@@ -47,13 +59,10 @@ export default async function AnalyticsOverviewPage() {
       <section className="mt-6 rounded border border-slate-800 p-4">
         <h2 className="text-lg font-semibold">Operational Metrics</h2>
         <p className="mt-2 text-sm text-slate-300">
-          Avg first response: {data.avg_response_time_minutes ?? "n/a"} min | Presence score:{" "}
-          {data.presence_overall_score_latest ?? "n/a"} | Minutes saved:{" "}
+          Avg first response: {data.avg_response_time_minutes ?? "n/a"} min | Presence score: {data.presence_overall_score_latest ?? "n/a"} | Minutes saved:{" "}
           {data.staff_reduction_index.estimated_minutes_saved_total}
         </p>
-        <p className="mt-1 text-sm text-slate-300">
-          Automation coverage: {data.staff_reduction_index.automation_coverage_rate}%
-        </p>
+        <p className="mt-1 text-sm text-slate-300">Automation coverage: {data.staff_reduction_index.automation_coverage_rate}%</p>
       </section>
 
       <section className="mt-6 rounded border border-slate-800 p-4">
@@ -72,4 +81,3 @@ export default async function AnalyticsOverviewPage() {
     </main>
   );
 }
-

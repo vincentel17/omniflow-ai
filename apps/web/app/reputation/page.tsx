@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+
 import { ReputationConsole } from "./reputation-console";
 
 type Review = {
@@ -18,8 +19,11 @@ type Campaign = {
 };
 
 export default async function ReputationPage() {
-  const reviews = await apiFetch<Review[]>("/reputation/reviews?limit=50&offset=0");
-  const campaigns = await apiFetch<Campaign[]>("/reputation/campaigns?limit=50&offset=0");
+  const [reviews, campaigns] = await Promise.all([
+    apiFetch<Review[]>("/reputation/reviews?limit=50&offset=0").catch(() => []),
+    apiFetch<Campaign[]>("/reputation/campaigns?limit=50&offset=0").catch(() => [])
+  ]);
+
   return (
     <main className="page-shell">
       <h1 className="text-3xl font-semibold">Reputation Manager</h1>
@@ -28,4 +32,3 @@ export default async function ReputationPage() {
     </main>
   );
 }
-

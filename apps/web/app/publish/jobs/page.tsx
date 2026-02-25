@@ -1,4 +1,5 @@
 import { apiFetch } from "../../../lib/api";
+
 import { PublishJobsTable } from "./table";
 
 type PublishJob = {
@@ -17,7 +18,11 @@ type OpsSettings = {
 };
 
 async function getJobs(): Promise<PublishJob[]> {
-  return apiFetch<PublishJob[]>("/publish/jobs?limit=50&offset=0");
+  try {
+    return await apiFetch<PublishJob[]>("/publish/jobs?limit=50&offset=0");
+  } catch {
+    return [];
+  }
 }
 
 async function getOpsSettings(): Promise<OpsSettings> {
@@ -42,4 +47,3 @@ export default async function PublishJobsPage() {
     </main>
   );
 }
-

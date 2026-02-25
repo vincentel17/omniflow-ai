@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+
 import { InboxConsole } from "./console";
 
 type Thread = {
@@ -13,7 +14,11 @@ type Thread = {
 };
 
 async function getThreads(): Promise<Thread[]> {
-  return apiFetch<Thread[]>("/inbox/threads?limit=50&offset=0");
+  try {
+    return await apiFetch<Thread[]>("/inbox/threads?limit=50&offset=0");
+  } catch {
+    return [];
+  }
 }
 
 export default async function InboxPage() {
@@ -26,4 +31,3 @@ export default async function InboxPage() {
     </main>
   );
 }
-
