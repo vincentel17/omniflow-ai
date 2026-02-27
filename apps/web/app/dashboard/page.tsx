@@ -41,7 +41,7 @@ export default async function DashboardPage() {
             OmniFlow AI turns social engagement into attributable revenue with guarded automation across campaigns, inbox, and optimization workflows.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge tone="info">Phase 9 rollout ready</Badge>
+            <Badge tone="info">Phase 14 MVP ready</Badge>
             <Badge tone={health?.status === "ok" ? "success" : "warn"}>API {health?.status ?? "unknown"}</Badge>
           </div>
         </div>
