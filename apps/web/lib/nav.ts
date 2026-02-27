@@ -18,6 +18,7 @@ export const navSections: NavSection[] = [
       { href: "/campaigns", label: "Campaigns", icon: "megaphone" },
       { href: "/content", label: "Content", icon: "pen" },
       { href: "/publish/jobs", label: "Publish Jobs", icon: "send" },
+      { href: "/ads", label: "Ads", icon: "megaphone" },
       { href: "/analytics", label: "Analytics", icon: "chart" }
     ]
   },
