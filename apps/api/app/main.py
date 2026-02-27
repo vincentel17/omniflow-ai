@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .routers.ads import router as ads_router
 from .routers.analytics import router as analytics_router
 from .routers.approvals import router as approvals_router
 from .routers.audit import router as audit_router
@@ -63,3 +64,4 @@ app.include_router(reputation_router)
 app.include_router(real_estate_router)
 app.include_router(workflows_router)
 app.include_router(approvals_router)
+app.include_router(ads_router)

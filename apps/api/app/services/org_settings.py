@@ -27,6 +27,19 @@ DEFAULT_ORG_SETTINGS: dict[str, Any] = {
         "meta_inbox_enabled": False,
         "linkedin_inbox_enabled": False,
     },
+    "enable_ads_automation": False,
+    "enable_ads_live": False,
+    "ads_provider_enabled_json": {
+        "meta_ads_enabled": False,
+        "google_ads_enabled": False,
+    },
+    "ads_budget_caps_json": {
+        "org_daily_cap_usd": 10,
+        "org_monthly_cap_usd": 200,
+        "per_campaign_cap_usd": 50,
+    },
+    "ads_canary_mode": True,
+    "require_approval_for_ads": True,
     "ai_mode": "mock",
     "max_auto_approve_tier": 1,
     "max_actions_per_event": 10,
@@ -60,6 +73,12 @@ def _safe_int(value: Any, fallback: int, *, minimum: int, maximum: int) -> int:
     return fallback
 
 
+def _safe_float(value: Any, fallback: float, *, minimum: float, maximum: float) -> float:
+    if isinstance(value, (int, float)):
+        return max(minimum, min(maximum, float(value)))
+    return fallback
+
+
 def _safe_provider_flags(value: Any) -> dict[str, bool]:
     defaults = dict(DEFAULT_ORG_SETTINGS["providers_enabled_json"])
     if not isinstance(value, dict):
@@ -69,6 +88,28 @@ def _safe_provider_flags(value: Any) -> dict[str, bool]:
         raw = value.get(key)
         normalized[key] = raw if isinstance(raw, bool) else bool(default)
     return normalized
+
+
+def _safe_ads_provider_flags(value: Any) -> dict[str, bool]:
+    defaults = dict(DEFAULT_ORG_SETTINGS["ads_provider_enabled_json"])
+    if not isinstance(value, dict):
+        return defaults
+    normalized: dict[str, bool] = {}
+    for key, default in defaults.items():
+        raw = value.get(key)
+        normalized[key] = raw if isinstance(raw, bool) else bool(default)
+    return normalized
+
+
+def _safe_ads_budget_caps(value: Any) -> dict[str, float]:
+    defaults = dict(DEFAULT_ORG_SETTINGS["ads_budget_caps_json"])
+    if not isinstance(value, dict):
+        return defaults
+    return {
+        "org_daily_cap_usd": _safe_float(value.get("org_daily_cap_usd"), float(defaults["org_daily_cap_usd"]), minimum=1.0, maximum=100000.0),
+        "org_monthly_cap_usd": _safe_float(value.get("org_monthly_cap_usd"), float(defaults["org_monthly_cap_usd"]), minimum=1.0, maximum=1000000.0),
+        "per_campaign_cap_usd": _safe_float(value.get("per_campaign_cap_usd"), float(defaults["per_campaign_cap_usd"]), minimum=1.0, maximum=100000.0),
+    }
 
 
 def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -101,6 +142,23 @@ def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
         settings.connector_mode if settings.connector_mode in {"mock", "live"} else "mock",
     )
     normalized["providers_enabled_json"] = _safe_provider_flags(source.get("providers_enabled_json"))
+
+    normalized["enable_ads_automation"] = _safe_bool(
+        source.get("enable_ads_automation"),
+        DEFAULT_ORG_SETTINGS["enable_ads_automation"],
+    )
+    normalized["enable_ads_live"] = _safe_bool(
+        source.get("enable_ads_live"),
+        DEFAULT_ORG_SETTINGS["enable_ads_live"],
+    )
+    normalized["ads_provider_enabled_json"] = _safe_ads_provider_flags(source.get("ads_provider_enabled_json"))
+    normalized["ads_budget_caps_json"] = _safe_ads_budget_caps(source.get("ads_budget_caps_json"))
+    normalized["ads_canary_mode"] = _safe_bool(source.get("ads_canary_mode"), DEFAULT_ORG_SETTINGS["ads_canary_mode"])
+    normalized["require_approval_for_ads"] = _safe_bool(
+        source.get("require_approval_for_ads"),
+        DEFAULT_ORG_SETTINGS["require_approval_for_ads"],
+    )
+
     normalized["ai_mode"] = _safe_mode(
         source.get("ai_mode"),
         settings.ai_mode if settings.ai_mode in {"mock", "live"} else "mock",
@@ -222,3 +280,35 @@ def provider_enabled_for_org(
         return False
     value = providers_enabled.get(key)
     return value is True
+
+
+def ads_live_enabled_for_org(db: Session, org_id: uuid.UUID) -> bool:
+    payload = get_org_settings_payload(db=db, org_id=org_id)
+    return payload.get("enable_ads_automation") is True and payload.get("enable_ads_live") is True
+
+
+def ads_provider_enabled_for_org(db: Session, org_id: uuid.UUID, provider: str) -> bool:
+    payload = get_org_settings_payload(db=db, org_id=org_id)
+    if payload.get("enable_ads_automation") is not True or payload.get("enable_ads_live") is not True:
+        return False
+    providers = payload.get("ads_provider_enabled_json")
+    if not isinstance(providers, dict):
+        return False
+    key = f"{provider}_ads_enabled"
+    return providers.get(key) is True
+
+
+def ads_budget_caps_for_org(db: Session, org_id: uuid.UUID) -> dict[str, float]:
+    payload = get_org_settings_payload(db=db, org_id=org_id)
+    caps = payload.get("ads_budget_caps_json")
+    if isinstance(caps, dict):
+        return {
+            "org_daily_cap_usd": float(caps.get("org_daily_cap_usd", 10)),
+            "org_monthly_cap_usd": float(caps.get("org_monthly_cap_usd", 200)),
+            "per_campaign_cap_usd": float(caps.get("per_campaign_cap_usd", 50)),
+        }
+    return {
+        "org_daily_cap_usd": 10.0,
+        "org_monthly_cap_usd": 200.0,
+        "per_campaign_cap_usd": 50.0,
+    }

@@ -55,6 +55,10 @@ class ApprovalEntityType(str, enum.Enum):
     PUBLISH_JOB = "publish_job"
     WORKFLOW_RUN = "workflow_run"
     WORKFLOW_ACTION_RUN = "workflow_action_run"
+    AD_CAMPAIGN = "ad_campaign"
+    AD_CREATIVE = "ad_creative"
+    AD_SPEND_CHANGE = "ad_spend_change"
+    AD_EXPERIMENT = "ad_experiment"
 
 
 class ApprovalStatus(str, enum.Enum):
@@ -94,6 +98,51 @@ class WorkflowActionRunStatus(str, enum.Enum):
     BLOCKED = "blocked"
     APPROVAL_PENDING = "approval_pending"
     SKIPPED = "skipped"
+
+
+class AdProvider(str, enum.Enum):
+    META = "meta"
+    GOOGLE = "google"
+
+
+class AdAccountStatus(str, enum.Enum):
+    ACTIVE = "active"
+    DISCONNECTED = "disconnected"
+    ERROR = "error"
+
+
+class AdCampaignStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PENDING_ACTIVATION = "pending_activation"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    ARCHIVED = "archived"
+
+
+class AdCampaignObjective(str, enum.Enum):
+    AWARENESS = "awareness"
+    TRAFFIC = "traffic"
+    LEADS = "leads"
+
+
+class AdCreativeStatus(str, enum.Enum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    ACTIVE = "active"
+    PAUSED = "paused"
+
+
+class AdCreativeFormat(str, enum.Enum):
+    SINGLE_IMAGE = "single_image"
+    VIDEO = "video"
+    TEXT = "text"
+
+
+class AdExperimentStatus(str, enum.Enum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 class InboxThreadType(str, enum.Enum):
     COMMENT = "comment"
@@ -652,6 +701,135 @@ class BrandProfile(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     locations_json: Mapped[list[dict[str, object]]] = mapped_column(JsonType, nullable=False, default=list)
     auto_approve_tiers_max: Mapped[int] = mapped_column(nullable=False, default=1)
     require_approval_for_publish: Mapped[bool] = mapped_column(nullable=False, default=True)
+
+
+
+class AdAccount(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "ad_accounts"
+    __table_args__ = (
+        UniqueConstraint("org_id", "provider", "account_ref", name="uq_ad_accounts_org_provider_ref"),
+        Index("ix_ad_accounts_org_provider_created", "org_id", "provider", "created_at"),
+        Index("ix_ad_accounts_org_status", "org_id", "status"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[AdProvider] = mapped_column(
+        Enum(AdProvider, name="ad_provider_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    account_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[AdAccountStatus] = mapped_column(
+        Enum(AdAccountStatus, name="ad_account_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=AdAccountStatus.ACTIVE,
+    )
+    linked_connector_account_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("connector_accounts.id"), nullable=True)
+
+
+class AdCampaign(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "ad_campaigns"
+    __table_args__ = (
+        Index("ix_ad_campaigns_org_provider_created", "org_id", "provider", "created_at"),
+        Index("ix_ad_campaigns_org_status", "org_id", "status"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[AdProvider] = mapped_column(
+        Enum(AdProvider, name="ad_provider_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    ad_account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ad_accounts.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    objective: Mapped[AdCampaignObjective] = mapped_column(
+        Enum(AdCampaignObjective, name="ad_campaign_objective_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    status: Mapped[AdCampaignStatus] = mapped_column(
+        Enum(AdCampaignStatus, name="ad_campaign_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=AdCampaignStatus.DRAFT,
+    )
+    daily_budget_usd: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    lifetime_budget_usd: Mapped[float | None] = mapped_column(nullable=True)
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    targeting_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    utm_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class AdCreative(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "ad_creatives"
+    __table_args__ = (
+        Index("ix_ad_creatives_org_status", "org_id", "status"),
+        Index("ix_ad_creatives_org_created", "org_id", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ad_campaigns.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    format: Mapped[AdCreativeFormat] = mapped_column(
+        Enum(AdCreativeFormat, name="ad_creative_format_enum", values_callable=_enum_values),
+        nullable=False,
+        default=AdCreativeFormat.TEXT,
+    )
+    primary_text: Mapped[str] = mapped_column(String(4000), nullable=False)
+    headline: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    media_ref: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    destination_tracked_link_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("link_tracking.id"), nullable=False)
+    status: Mapped[AdCreativeStatus] = mapped_column(
+        Enum(AdCreativeStatus, name="ad_creative_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=AdCreativeStatus.DRAFT,
+    )
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class AdExperiment(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "ad_experiments"
+    __table_args__ = (
+        Index("ix_ad_experiments_org_status", "org_id", "status"),
+        Index("ix_ad_experiments_org_created", "org_id", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ad_campaigns.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    hypothesis: Mapped[str] = mapped_column(String(1000), nullable=False)
+    status: Mapped[AdExperimentStatus] = mapped_column(
+        Enum(AdExperimentStatus, name="ad_experiment_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=AdExperimentStatus.DRAFT,
+    )
+    variants_json: Mapped[list[dict[str, object]]] = mapped_column(JsonType, nullable=False, default=list)
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    success_metric: Mapped[str] = mapped_column(String(100), nullable=False, default="clicks")
+
+
+class AdSpendLedger(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "ad_spend_ledger"
+    __table_args__ = (
+        Index("ix_ad_spend_ledger_org_day", "org_id", "day"),
+        Index("ix_ad_spend_ledger_org_provider_created", "org_id", "provider", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    provider: Mapped[AdProvider] = mapped_column(
+        Enum(AdProvider, name="ad_provider_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ad_campaigns.id"), nullable=False)
+    day: Mapped[date] = mapped_column(nullable=False)
+    spend_usd: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    impressions: Mapped[int | None] = mapped_column(nullable=True)
+    clicks: Mapped[int | None] = mapped_column(nullable=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="mock")
 
 
 class OrgSettings(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -1229,8 +1407,4 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-
-
 

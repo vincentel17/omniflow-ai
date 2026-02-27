@@ -7,6 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from .models import (
     ApprovalStatus,
+    AdAccountStatus,
+    AdCampaignObjective,
+    AdCampaignStatus,
+    AdCreativeFormat,
+    AdCreativeStatus,
+    AdExperimentStatus,
+    AdProvider,
     BrandProfile,
     CampaignPlanStatus,
     ContentItemStatus,
@@ -517,6 +524,12 @@ class OpsSettingsResponse(BaseModel):
     business_hours_start_hour: int = Field(default=9, ge=0, le=23)
     business_hours_end_hour: int = Field(default=17, ge=0, le=23)
     automation_weights: dict[str, int] = Field(default_factory=dict)
+    enable_ads_automation: bool = False
+    enable_ads_live: bool = False
+    ads_provider_enabled_json: dict[str, bool] = Field(default_factory=dict)
+    ads_budget_caps_json: dict[str, float] = Field(default_factory=dict)
+    ads_canary_mode: bool = True
+    require_approval_for_ads: bool = True
 
 
 class OpsSettingsPatchRequest(BaseModel):
@@ -538,6 +551,12 @@ class OpsSettingsPatchRequest(BaseModel):
     business_hours_start_hour: int | None = Field(default=None, ge=0, le=23)
     business_hours_end_hour: int | None = Field(default=None, ge=0, le=23)
     automation_weights: dict[str, int] | None = None
+    enable_ads_automation: bool | None = None
+    enable_ads_live: bool | None = None
+    ads_provider_enabled_json: dict[str, bool] | None = None
+    ads_budget_caps_json: dict[str, float] | None = None
+    ads_canary_mode: bool | None = None
+    require_approval_for_ads: bool | None = None
 
 class OnboardingSessionResponse(BaseModel):
     id: uuid.UUID
@@ -943,5 +962,148 @@ class ApprovalResponse(BaseModel):
     decided_by: uuid.UUID | None
     decided_at: datetime | None
     notes: str | None
+    created_at: datetime
+
+
+class AdsSettingsResponse(BaseModel):
+    enable_ads_automation: bool = False
+    enable_ads_live: bool = False
+    ads_provider_enabled_json: dict[str, bool] = Field(default_factory=dict)
+    ads_budget_caps_json: dict[str, float] = Field(default_factory=dict)
+    ads_canary_mode: bool = True
+    require_approval_for_ads: bool = True
+
+
+class AdsSettingsPatchRequest(BaseModel):
+    enable_ads_automation: bool | None = None
+    enable_ads_live: bool | None = None
+    ads_provider_enabled_json: dict[str, bool] | None = None
+    ads_budget_caps_json: dict[str, float] | None = None
+    ads_canary_mode: bool | None = None
+    require_approval_for_ads: bool | None = None
+
+
+class AdAccountCreateRequest(BaseModel):
+    provider: AdProvider
+    account_ref: str = Field(min_length=1, max_length=255)
+    display_name: str = Field(min_length=1, max_length=255)
+    linked_connector_account_id: uuid.UUID | None = None
+
+
+class AdAccountResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    provider: AdProvider
+    account_ref: str
+    display_name: str
+    status: AdAccountStatus
+    linked_connector_account_id: uuid.UUID | None = None
+    created_at: datetime
+
+
+class AdCampaignCreateRequest(BaseModel):
+    provider: AdProvider
+    ad_account_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=255)
+    objective: AdCampaignObjective
+    daily_budget_usd: float = Field(gt=0)
+    lifetime_budget_usd: float | None = Field(default=None, gt=0)
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    targeting_json: dict[str, object] = Field(default_factory=dict)
+    utm_json: dict[str, object] = Field(default_factory=dict)
+
+
+class AdCampaignPatchRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    daily_budget_usd: float | None = Field(default=None, gt=0)
+    lifetime_budget_usd: float | None = Field(default=None, gt=0)
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    targeting_json: dict[str, object] | None = None
+    utm_json: dict[str, object] | None = None
+
+
+class AdCampaignResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    provider: AdProvider
+    ad_account_id: uuid.UUID
+    name: str
+    objective: AdCampaignObjective
+    status: AdCampaignStatus
+    daily_budget_usd: float
+    lifetime_budget_usd: float | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    targeting_json: dict[str, object]
+    utm_json: dict[str, object]
+    created_by: uuid.UUID
+    external_id: str | None = None
+    last_synced_at: datetime | None = None
+    last_error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdCreativeCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    format: AdCreativeFormat = AdCreativeFormat.TEXT
+    primary_text: str = Field(min_length=1, max_length=4000)
+    headline: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=1000)
+    media_ref: str | None = Field(default=None, max_length=2048)
+    destination_tracked_link_id: uuid.UUID
+
+
+class AdCreativeResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    campaign_id: uuid.UUID
+    name: str
+    format: AdCreativeFormat
+    primary_text: str
+    headline: str | None = None
+    description: str | None = None
+    media_ref: str | None = None
+    destination_tracked_link_id: uuid.UUID
+    status: AdCreativeStatus
+    external_id: str | None = None
+    created_at: datetime
+
+
+class AdExperimentCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    hypothesis: str = Field(min_length=1, max_length=1000)
+    variants_json: list[dict[str, object]] = Field(default_factory=list, min_length=1, max_length=10)
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    success_metric: str = Field(default="clicks", min_length=1, max_length=100)
+
+
+class AdExperimentResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    campaign_id: uuid.UUID
+    name: str
+    hypothesis: str
+    status: AdExperimentStatus
+    variants_json: list[dict[str, object]]
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    success_metric: str
+    created_at: datetime
+
+
+class AdSpendLedgerResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    provider: AdProvider
+    campaign_id: uuid.UUID
+    day: date
+    spend_usd: float
+    impressions: int | None = None
+    clicks: int | None = None
+    source: str
     created_at: datetime
 
