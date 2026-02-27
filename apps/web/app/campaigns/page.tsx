@@ -10,7 +10,11 @@ type Campaign = {
 };
 
 async function getCampaigns(): Promise<Campaign[]> {
-  return apiFetch<Campaign[]>("/campaigns?limit=50&offset=0");
+  try {
+    return await apiFetch<Campaign[]>("/campaigns?limit=50&offset=0");
+  } catch {
+    return [];
+  }
 }
 
 export default async function CampaignsPage() {
@@ -23,4 +27,3 @@ export default async function CampaignsPage() {
     </main>
   );
 }
-

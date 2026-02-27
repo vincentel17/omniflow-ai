@@ -12,7 +12,11 @@ type ContentItem = {
 };
 
 async function getContent(): Promise<ContentItem[]> {
-  return apiFetch<ContentItem[]>("/content?limit=50&offset=0");
+  try {
+    return await apiFetch<ContentItem[]>("/content?limit=50&offset=0");
+  } catch {
+    return [];
+  }
 }
 
 export default async function ContentPage() {
@@ -25,4 +29,3 @@ export default async function ContentPage() {
     </main>
   );
 }
-
