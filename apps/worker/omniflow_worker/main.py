@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from celery import Celery
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -1000,14 +1000,15 @@ def workflow_evaluate(event_id: str) -> str:
             .limit(1)
         )
         if recent_runs is not None:
-            run_count = len(
-                db.scalars(
-                    select(WorkflowRun.id).where(
+            run_count = int(
+                db.scalar(
+                    select(func.count(WorkflowRun.id)).where(
                         WorkflowRun.org_id == row.org_id,
                         WorkflowRun.created_at >= hour_window_start,
                         WorkflowRun.deleted_at.is_(None),
                     )
-                ).all()
+                )
+                or 0
             )
             if run_count >= limits["max_workflow_runs_per_hour"]:
                 return "max_workflow_runs_per_hour_reached"
@@ -1032,15 +1033,16 @@ def workflow_evaluate(event_id: str) -> str:
             day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             max_runs_per_day = _as_int(workflow_definition.get("max_runs_per_day", 0), 0)
             if max_runs_per_day > 0:
-                runs_today = len(
-                    db.scalars(
-                        select(WorkflowRun.id).where(
+                runs_today = int(
+                    db.scalar(
+                        select(func.count(WorkflowRun.id)).where(
                             WorkflowRun.org_id == row.org_id,
                             WorkflowRun.workflow_id == workflow.id,
                             WorkflowRun.created_at >= day_start,
                             WorkflowRun.deleted_at.is_(None),
                         )
-                    ).all()
+                    )
+                    or 0
                 )
                 if runs_today >= max_runs_per_day:
                     run = WorkflowRun(
@@ -1285,6 +1287,8 @@ def workflow_approval_apply(approval_id: str) -> str:
             db.commit()
             return "rejected"
         return "pending"
+
+
 
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, select
@@ -163,6 +164,21 @@ def _tracked_link_valid_for_ads(link: LinkTracking) -> bool:
     has_content = any(utm.get(k) for k in ("content", "content_id", "utm_content"))
     return has_campaign and has_content
 
+def _to_ads_settings_response(payload: dict[str, object]) -> AdsSettingsResponse:
+    providers_raw = payload.get("ads_provider_enabled_json")
+    budgets_raw = payload.get("ads_budget_caps_json")
+    providers = cast(dict[str, bool], providers_raw) if isinstance(providers_raw, dict) else {}
+    budgets = cast(dict[str, float], budgets_raw) if isinstance(budgets_raw, dict) else {}
+    return AdsSettingsResponse(
+        enable_ads_automation=payload.get("enable_ads_automation") is True,
+        enable_ads_live=payload.get("enable_ads_live") is True,
+        ads_provider_enabled_json=providers,
+        ads_budget_caps_json=budgets,
+        ads_canary_mode=payload.get("ads_canary_mode") is True,
+        require_approval_for_ads=payload.get("require_approval_for_ads") is True,
+    )
+
+
 
 @router.get("/settings", response_model=AdsSettingsResponse)
 def get_ads_settings(
@@ -171,7 +187,7 @@ def get_ads_settings(
 ) -> AdsSettingsResponse:
     require_role(context, Role.ADMIN)
     payload = ads_settings_for_org(db=db, org_id=context.current_org_id)
-    return AdsSettingsResponse(**payload)
+    return _to_ads_settings_response(payload)
 
 
 @router.patch("/settings", response_model=AdsSettingsResponse)
@@ -191,7 +207,7 @@ def patch_ads_settings(
         metadata_json={"keys": sorted(req.model_dump(exclude_none=True).keys())},
     )
     db.commit()
-    return AdsSettingsResponse(**payload)
+    return _to_ads_settings_response(payload)
 
 
 @router.post("/accounts", response_model=AdAccountResponse, status_code=status.HTTP_201_CREATED)
@@ -730,3 +746,6 @@ def list_metrics(
         )
     ).all()
     return [_serialize_ledger(row) for row in rows]
+
+
+
