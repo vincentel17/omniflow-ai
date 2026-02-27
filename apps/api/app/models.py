@@ -167,6 +167,13 @@ class UsageMetricType(str, enum.Enum):
     AD_IMPRESSION = "ad_impression"
     USER_CREATED = "user_created"
 
+
+class ModelStatus(str, enum.Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    EXPERIMENTAL = "experimental"
+    DEGRADED = "degraded"
+
 class DSARRequestType(str, enum.Enum):
     ACCESS = "access"
     DELETE = "delete"
@@ -1166,6 +1173,92 @@ class LeadScore(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     model_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1")
 
 
+class PredictiveLeadScore(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "predictive_lead_scores"
+    __table_args__ = (
+        UniqueConstraint("org_id", "lead_id", "model_version", name="uq_predictive_lead_scores_org_lead_model"),
+        Index("ix_predictive_lead_scores_org_id", "org_id"),
+        Index("ix_predictive_lead_scores_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    lead_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("leads.id"), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    score_probability: Mapped[float] = mapped_column(nullable=False)
+    feature_importance_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    predicted_stage_probability_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PostingOptimization(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "posting_optimizations"
+    __table_args__ = (
+        UniqueConstraint("org_id", "channel", name="uq_posting_optimizations_org_channel"),
+        Index("ix_posting_optimizations_org_id", "org_id"),
+        Index("ix_posting_optimizations_updated_at", "updated_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    channel: Mapped[str] = mapped_column(String(80), nullable=False)
+    best_day_of_week: Mapped[int] = mapped_column(nullable=False, default=2)
+    best_hour: Mapped[int] = mapped_column(nullable=False, default=10)
+    confidence_score: Mapped[float] = mapped_column(nullable=False, default=0.2)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False, default="post_timing_model_v1")
+
+
+class AdBudgetRecommendation(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "ad_budget_recommendations"
+    __table_args__ = (
+        Index("ix_ad_budget_recommendations_org_id", "org_id"),
+        Index("ix_ad_budget_recommendations_campaign_id", "campaign_id"),
+        Index("ix_ad_budget_recommendations_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ad_campaigns.id"), nullable=False)
+    recommended_daily_budget: Mapped[float] = mapped_column(nullable=False)
+    reasoning_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    projected_cpl: Mapped[float] = mapped_column(nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False, default="ad_budget_allocator_v1")
+
+
+class ModelMetadata(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "model_metadata"
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", "version", name="uq_model_metadata_org_name_version"),
+        Index("ix_model_metadata_org_id", "org_id"),
+        Index("ix_model_metadata_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    version: Mapped[str] = mapped_column(String(80), nullable=False)
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    training_window: Mapped[str] = mapped_column(String(120), nullable=False)
+    metrics_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    status: Mapped[ModelStatus] = mapped_column(
+        Enum(ModelStatus, name="model_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=ModelStatus.INACTIVE,
+    )
+
+
+class OrgOptimizationSettings(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "org_optimization_settings"
+    __table_args__ = (
+        UniqueConstraint("org_id", name="uq_org_optimization_settings_org_id"),
+        Index("ix_org_optimization_settings_org_id", "org_id"),
+        Index("ix_org_optimization_settings_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    enable_predictive_scoring: Mapped[bool] = mapped_column(nullable=False, default=False)
+    enable_post_timing_optimization: Mapped[bool] = mapped_column(nullable=False, default=False)
+    enable_nurture_optimization: Mapped[bool] = mapped_column(nullable=False, default=False)
+    enable_ad_budget_recommendations: Mapped[bool] = mapped_column(nullable=False, default=False)
+    auto_apply_low_risk_optimizations: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
 class LeadAssignment(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "lead_assignments"
     __table_args__ = (
@@ -1577,6 +1670,8 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 
 
 

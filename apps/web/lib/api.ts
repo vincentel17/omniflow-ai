@@ -101,3 +101,110 @@ export async function getComplianceEvidenceBundle(fromDate: string, toDate: stri
     `/compliance/evidence-bundle?from_date=${encodeURIComponent(fromDate)}&to_date=${encodeURIComponent(toDate)}&include_pii=${includePii}`,
   );
 }
+
+export type OptimizationModel = {
+  id: string;
+  org_id: string;
+  name: string;
+  version: string;
+  trained_at: string;
+  training_window: string;
+  metrics_json: Record<string, unknown>;
+  status: string;
+  created_at: string;
+};
+
+export type PredictiveLeadScore = {
+  id: string;
+  org_id: string;
+  lead_id: string;
+  model_version: string;
+  score_probability: number;
+  feature_importance_json: Record<string, number>;
+  predicted_stage_probability_json: Record<string, number>;
+  explanation: string;
+  final_score: number;
+  scored_at: string;
+};
+
+export type PostingOptimization = {
+  id: string;
+  org_id: string;
+  channel: string;
+  best_day_of_week: number;
+  best_hour: number;
+  confidence_score: number;
+  model_version: string;
+  explanation: string;
+  updated_at: string;
+};
+
+export type NurtureRecommendation = {
+  recommended_delays_minutes: number[];
+  explanation: string;
+};
+
+export type AdBudgetRecommendation = {
+  id: string;
+  org_id: string;
+  campaign_id: string;
+  recommended_daily_budget: number;
+  reasoning_json: Record<string, string | number>;
+  projected_cpl: number;
+  model_version: string;
+  explanation: string;
+  created_at: string;
+};
+
+export type WorkflowOptimizationSuggestion = {
+  workflow_key: string;
+  suggestion: string;
+  priority: string;
+};
+
+export type NextBestAction = {
+  action_type: string;
+  rationale: string;
+  expected_uplift: number;
+  confidence_score: number;
+};
+
+export type OptimizationSettings = {
+  enable_predictive_scoring: boolean;
+  enable_post_timing_optimization: boolean;
+  enable_nurture_optimization: boolean;
+  enable_ad_budget_recommendations: boolean;
+  auto_apply_low_risk_optimizations: boolean;
+};
+
+export async function getOptimizationSettings(): Promise<OptimizationSettings> {
+  return apiFetch<OptimizationSettings>("/optimization/settings");
+}
+
+export async function listOptimizationModels(): Promise<OptimizationModel[]> {
+  return apiFetch<OptimizationModel[]>("/optimization/models");
+}
+
+export async function listPostingOptimizations(channel = "meta"): Promise<PostingOptimization[]> {
+  return apiFetch<PostingOptimization[]>(`/optimization/campaigns?channel=${encodeURIComponent(channel)}`);
+}
+
+export async function getNurtureRecommendations(): Promise<NurtureRecommendation> {
+  return apiFetch<NurtureRecommendation>("/optimization/nurture/recommendations");
+}
+
+export async function listAdBudgetRecommendations(): Promise<AdBudgetRecommendation[]> {
+  return apiFetch<AdBudgetRecommendation[]>("/optimization/ads?limit=20");
+}
+
+export async function listWorkflowOptimizationSuggestions(): Promise<WorkflowOptimizationSuggestion[]> {
+  return apiFetch<WorkflowOptimizationSuggestion[]>("/optimization/workflows");
+}
+
+export async function getNextBestAction(entityType: string, id: string): Promise<NextBestAction> {
+  return apiFetch<NextBestAction>(`/optimization/next-best-action/${encodeURIComponent(entityType)}/${encodeURIComponent(id)}`);
+}
+
+export async function scoreLeadPredictive(leadId: string): Promise<PredictiveLeadScore> {
+  return apiFetch<PredictiveLeadScore>(`/optimization/lead-score/${encodeURIComponent(leadId)}`, { method: "POST" });
+}

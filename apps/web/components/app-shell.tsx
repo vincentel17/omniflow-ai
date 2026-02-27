@@ -38,6 +38,8 @@ function AppIcon({ name }: { name: string }) {
       return <svg aria-hidden className={common} viewBox="0 0 24 24"><path d="M4 16.5V20h3.5L18 9.5 14.5 6zM19.7 7.8c.4-.4.4-1 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.3 1.3 3.5 3.5z" fill="currentColor" /></svg>;
     case "send":
       return <svg aria-hidden className={common} viewBox="0 0 24 24"><path d="m2 20 20-8L2 4v6l14 2-14 2z" fill="currentColor" /></svg>;
+    case "sparkles":
+      return <svg aria-hidden className={common} viewBox="0 0 24 24"><path d="m12 3 1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5zM5 14l1 2.2L8 17l-2 .8L5 20l-.9-2.2L2 17l2.1-.8zM19 14l1 2.2 2 .8-2 .8-1 2.2-.9-2.2-2.1-.8 2.1-.8z" fill="currentColor" /></svg>;
     case "pulse":
       return <svg aria-hidden className={common} viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 8 2-4h6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>;
     case "building":
@@ -196,3 +198,7 @@ export function AppShell({ children, orgId, role, isRealEstate, envLabel, aiMode
     </div>
   );
 }
+
+
+
+

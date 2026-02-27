@@ -31,6 +31,7 @@ export const navSections: NavSection[] = [
   {
     title: "Optimize",
     items: [
+      { href: "/optimization", label: "Optimization", icon: "sparkles" },
       { href: "/presence", label: "Presence", icon: "pulse" },
       { href: "/seo", label: "SEO", icon: "search" },
       { href: "/reputation", label: "Reputation", icon: "star" },
@@ -48,4 +49,3 @@ export const navSections: NavSection[] = [
     ]
   }
 ];
-

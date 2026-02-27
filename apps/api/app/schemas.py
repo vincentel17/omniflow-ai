@@ -1230,3 +1230,89 @@ class AdminBillingOverviewResponse(BaseModel):
     active_subscriptions: int
     churn_count: int
     plan_distribution: dict[str, int]
+
+class OrgOptimizationSettingsResponse(BaseModel):
+    enable_predictive_scoring: bool = False
+    enable_post_timing_optimization: bool = False
+    enable_nurture_optimization: bool = False
+    enable_ad_budget_recommendations: bool = False
+    auto_apply_low_risk_optimizations: bool = False
+
+
+class OrgOptimizationSettingsPatchRequest(BaseModel):
+    enable_predictive_scoring: bool | None = None
+    enable_post_timing_optimization: bool | None = None
+    enable_nurture_optimization: bool | None = None
+    enable_ad_budget_recommendations: bool | None = None
+    auto_apply_low_risk_optimizations: bool | None = None
+
+
+class PredictiveLeadScoreResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    lead_id: uuid.UUID
+    model_version: str
+    score_probability: float
+    feature_importance_json: dict[str, float]
+    predicted_stage_probability_json: dict[str, float]
+    explanation: str
+    final_score: int
+    scored_at: datetime
+
+
+class PostingOptimizationResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    channel: str
+    best_day_of_week: int
+    best_hour: int
+    confidence_score: float
+    model_version: str
+    explanation: str
+    updated_at: datetime
+
+
+class NurtureRecommendationResponse(BaseModel):
+    recommended_delays_minutes: list[int]
+    explanation: str
+
+
+class AdBudgetRecommendationResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    campaign_id: uuid.UUID
+    recommended_daily_budget: float
+    reasoning_json: dict[str, float | str]
+    projected_cpl: float
+    model_version: str
+    explanation: str
+    created_at: datetime
+
+
+class WorkflowOptimizationSuggestion(BaseModel):
+    workflow_key: str
+    suggestion: str
+    priority: str
+
+
+class NextBestActionResponse(BaseModel):
+    action_type: str
+    rationale: str
+    expected_uplift: float
+    confidence_score: float
+
+
+class ModelMetadataResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    name: str
+    version: str
+    trained_at: datetime
+    training_window: str
+    metrics_json: dict[str, object]
+    status: str
+    created_at: datetime
+
+
+class ModelActivateRequest(BaseModel):
+    version: str = Field(min_length=1, max_length=80)

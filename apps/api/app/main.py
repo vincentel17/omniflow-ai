@@ -23,6 +23,7 @@ from .routers.leads import sla_router
 from .routers.links import router as links_router
 from .routers.onboarding import router as onboarding_router
 from .routers.ops import router as ops_router
+from .routers.optimization import router as optimization_router
 from .routers.orgs import router as org_router
 from .routers.presence import router as presence_router
 from .routers.publish import router as publish_router
@@ -71,3 +72,4 @@ app.include_router(approvals_router)
 app.include_router(billing_router)
 app.include_router(ads_router)
 app.include_router(compliance_router)
+app.include_router(optimization_router)
