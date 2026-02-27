@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     connector_mode: str = "mock"
     connector_circuit_breaker_threshold: int = 3
     connector_circuit_breaker_cooldown_seconds: int = 300
+    app_encryption_key: str | None = None
     token_encryption_key: str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     oauth_redirect_uri: str = "http://localhost:3000/api/auth/callback"
     allowed_oauth_redirect_uris: str = "http://localhost:3000/api/auth/callback"
@@ -40,6 +41,8 @@ class Settings(BaseSettings):
         if self.app_env == "development":
             return self
         missing: list[str] = []
+        if self.app_env == "production" and not self.app_encryption_key:
+            missing.append("APP_ENCRYPTION_KEY")
         if not self.token_encryption_key:
             missing.append("TOKEN_ENCRYPTION_KEY")
         if self.connector_mode == "live" and not self.oauth_redirect_uri:
@@ -53,5 +56,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-

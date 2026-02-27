@@ -144,6 +144,20 @@ class AdExperimentStatus(str, enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+
+class DSARRequestType(str, enum.Enum):
+    ACCESS = "access"
+    DELETE = "delete"
+    EXPORT = "export"
+
+
+class DSARRequestStatus(str, enum.Enum):
+    REQUESTED = "requested"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+
+
 class InboxThreadType(str, enum.Enum):
     COMMENT = "comment"
     DM = "dm"
@@ -326,6 +340,7 @@ class TimestampMixin:
 
 class SoftDeleteMixin:
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deletion_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class Org(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -844,6 +859,57 @@ class OrgSettings(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     settings_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
 
 
+
+class DataRetentionPolicy(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "data_retention_policies"
+    __table_args__ = (
+        UniqueConstraint("org_id", "entity_type", name="uq_data_retention_policy_org_entity"),
+        Index("ix_data_retention_policies_org_id", "org_id"),
+        Index("ix_data_retention_policies_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    retention_days: Mapped[int] = mapped_column(nullable=False)
+    hard_delete_after_days: Mapped[int] = mapped_column(nullable=False)
+
+
+class DSARRequest(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "dsar_requests"
+    __table_args__ = (
+        Index("ix_dsar_requests_org_id", "org_id"),
+        Index("ix_dsar_requests_created_at", "created_at"),
+        Index("ix_dsar_requests_org_status", "org_id", "status"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    request_type: Mapped[DSARRequestType] = mapped_column(
+        Enum(DSARRequestType, name="dsar_request_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    subject_identifier: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[DSARRequestStatus] = mapped_column(
+        Enum(DSARRequestStatus, name="dsar_request_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=DSARRequestStatus.REQUESTED,
+    )
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    export_ref: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
+
+class PermissionAuditReport(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "permission_audit_reports"
+    __table_args__ = (
+        Index("ix_permission_audit_reports_org_id", "org_id"),
+        Index("ix_permission_audit_reports_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    findings_json: Mapped[list[dict[str, object]]] = mapped_column(JsonType, nullable=False, default=list)
+    recommendations_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+
+
 class LinkTracking(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "link_tracking"
     __table_args__ = (
@@ -928,6 +994,8 @@ class Lead(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     location_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     tags_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    pii_flags_json: Mapped[dict[str, object] | None] = mapped_column(JsonType, nullable=True)
+    sensitive_level: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
 
 
 class InboxThread(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -984,6 +1052,8 @@ class InboxMessage(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     body_text: Mapped[str] = mapped_column(String(8000), nullable=False)
     body_raw_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     flags_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    pii_flags_json: Mapped[dict[str, object] | None] = mapped_column(JsonType, nullable=True)
+    sensitive_level: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
 
 
 class LeadScore(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -1175,6 +1245,8 @@ class ReputationReview(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     review_text_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     sentiment_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pii_flags_json: Mapped[dict[str, object] | None] = mapped_column(JsonType, nullable=True)
+    sensitive_level: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
 
 
 class ReputationRequestCampaign(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -1230,6 +1302,8 @@ class REDeal(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     primary_contact_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     property_address_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     important_dates_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    pii_flags_json: Mapped[dict[str, object] | None] = mapped_column(JsonType, nullable=True)
+    sensitive_level: Mapped[str] = mapped_column(String(16), nullable=False, default="high")
 
 
 class REChecklistTemplate(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -1332,6 +1406,8 @@ class RECMAReport(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     subject_property_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     pricing_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     narrative_text: Mapped[str | None] = mapped_column(String(32000), nullable=True)
+    pii_flags_json: Mapped[dict[str, object] | None] = mapped_column(JsonType, nullable=True)
+    sensitive_level: Mapped[str] = mapped_column(String(16), nullable=False, default="high")
     risk_tier: Mapped[RiskTier] = mapped_column(
         Enum(RiskTier, name="risk_tier_enum", values_callable=_enum_values),
         nullable=False,
@@ -1407,4 +1483,6 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 

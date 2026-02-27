@@ -12,7 +12,8 @@ from ..settings import settings
 
 
 def _fernet() -> Fernet:
-    return Fernet(settings.token_encryption_key.encode("utf-8"))
+    key = settings.app_encryption_key or settings.token_encryption_key
+    return Fernet(key.encode("utf-8"))
 
 
 def encrypt_token(token: str) -> str:

@@ -5,6 +5,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from packages.security import redact_mapping
+
 from ..models import Event
 
 
@@ -35,7 +37,7 @@ def write_event(
         source=source,
         channel=channel,
         type=event_type,
-        payload_json=payload_json or {},
+        payload_json=redact_mapping(payload_json or {}),
         campaign_id=campaign_id,
         content_id=content_id,
         lead_id=lead_id,
@@ -45,3 +47,6 @@ def write_event(
     db.flush()
     _enqueue_workflow_evaluation(event.id)
     return event
+
+
+

@@ -40,6 +40,7 @@ DEFAULT_ORG_SETTINGS: dict[str, Any] = {
     },
     "ads_canary_mode": True,
     "require_approval_for_ads": True,
+    "compliance_mode": "none",
     "ai_mode": "mock",
     "max_auto_approve_tier": 1,
     "max_actions_per_event": 10,
@@ -57,6 +58,12 @@ def _safe_bool(value: Any, fallback: bool) -> bool:
 
 def _safe_mode(value: Any, fallback: str) -> str:
     if isinstance(value, str) and value in {"mock", "live"}:
+        return value
+    return fallback
+
+
+def _safe_compliance_mode(value: Any, fallback: str) -> str:
+    if isinstance(value, str) and value in {"none", "real_estate", "home_care"}:
         return value
     return fallback
 
@@ -157,6 +164,10 @@ def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     normalized["require_approval_for_ads"] = _safe_bool(
         source.get("require_approval_for_ads"),
         DEFAULT_ORG_SETTINGS["require_approval_for_ads"],
+    )
+    normalized["compliance_mode"] = _safe_compliance_mode(
+        source.get("compliance_mode"),
+        str(DEFAULT_ORG_SETTINGS["compliance_mode"]),
     )
 
     normalized["ai_mode"] = _safe_mode(
@@ -312,3 +323,5 @@ def ads_budget_caps_for_org(db: Session, org_id: uuid.UUID) -> dict[str, float]:
         "org_monthly_cap_usd": 200.0,
         "per_campaign_cap_usd": 50.0,
     }
+
+

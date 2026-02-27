@@ -43,8 +43,9 @@ export const navSections: NavSection[] = [
       { href: "/settings", label: "Org", icon: "settings" },
       { href: "/settings/verticals", label: "Vertical", icon: "layers" },
       { href: "/settings/integrations", label: "Integrations", icon: "plug" },
-      { href: "/audit", label: "Compliance", icon: "shield" },
+      { href: "/compliance", label: "Compliance", icon: "shield" },
       { href: "/events", label: "Events", icon: "list" }
     ]
   }
 ];
+

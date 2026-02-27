@@ -5,7 +5,7 @@ const links = [
   { href: "/settings/brand", label: "Brand Profile", desc: "Manage voice, tone, and publishing preferences." },
   { href: "/settings/integrations", label: "Integrations", desc: "Configure OAuth accounts and live toggles." },
   { href: "/settings/sla", label: "SLA", desc: "Set response and resolution targets." },
-  { href: "/audit", label: "Audit Log", desc: "Review policy and operator actions." }
+  { href: "/compliance", label: "Compliance Dashboard", desc: "Retention, DSAR, RBAC risk and evidence exports." },
 ];
 
 export default function SettingsPage() {
@@ -27,3 +27,4 @@ export default function SettingsPage() {
     </main>
   );
 }
+

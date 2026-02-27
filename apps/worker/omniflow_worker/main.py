@@ -1301,3 +1301,46 @@ def workflow_approval_apply(approval_id: str) -> str:
 
 
 
+
+
+
+@app.task(name="worker.retention.enforcer_tick")
+def retention_enforcer_tick() -> int:
+    from app.models import DataRetentionPolicy, Lead
+
+    now = _now()
+    soft_deleted = 0
+    with SessionLocal() as db:
+        policies = db.scalars(
+            select(DataRetentionPolicy).where(
+                DataRetentionPolicy.deleted_at.is_(None),
+                DataRetentionPolicy.entity_type == "lead",
+            )
+        ).all()
+        for policy in policies:
+            if policy.retention_days <= 0:
+                continue
+            cutoff = now - timedelta(days=policy.retention_days)
+            leads = db.scalars(
+                select(Lead).where(
+                    Lead.org_id == policy.org_id,
+                    Lead.deleted_at.is_(None),
+                    Lead.created_at < cutoff,
+                )
+            ).all()
+            for lead in leads:
+                lead.deleted_at = now
+                lead.deletion_reason = "retention_policy"
+                soft_deleted += 1
+
+            if leads:
+                write_event(
+                    db=db,
+                    org_id=policy.org_id,
+                    source="worker",
+                    channel="compliance",
+                    event_type="DATA_RETENTION_APPLIED",
+                    payload_json={"entity_type": "lead", "soft_deleted": len(leads)},
+                )
+        db.commit()
+    return soft_deleted

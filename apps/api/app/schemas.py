@@ -530,7 +530,7 @@ class OpsSettingsResponse(BaseModel):
     ads_budget_caps_json: dict[str, float] = Field(default_factory=dict)
     ads_canary_mode: bool = True
     require_approval_for_ads: bool = True
-
+    compliance_mode: str = Field(default="none", pattern="^(none|real_estate|home_care)$")
 
 class OpsSettingsPatchRequest(BaseModel):
     enable_auto_posting: bool | None = None
@@ -557,7 +557,7 @@ class OpsSettingsPatchRequest(BaseModel):
     ads_budget_caps_json: dict[str, float] | None = None
     ads_canary_mode: bool | None = None
     require_approval_for_ads: bool | None = None
-
+    compliance_mode: str | None = Field(default=None, pattern="^(none|real_estate|home_care)$")
 class OnboardingSessionResponse(BaseModel):
     id: uuid.UUID
     org_id: uuid.UUID
@@ -972,7 +972,7 @@ class AdsSettingsResponse(BaseModel):
     ads_budget_caps_json: dict[str, float] = Field(default_factory=dict)
     ads_canary_mode: bool = True
     require_approval_for_ads: bool = True
-
+    compliance_mode: str = Field(default="none", pattern="^(none|real_estate|home_care)$")
 
 class AdsSettingsPatchRequest(BaseModel):
     enable_ads_automation: bool | None = None
@@ -981,7 +981,7 @@ class AdsSettingsPatchRequest(BaseModel):
     ads_budget_caps_json: dict[str, float] | None = None
     ads_canary_mode: bool | None = None
     require_approval_for_ads: bool | None = None
-
+    compliance_mode: str | None = Field(default=None, pattern="^(none|real_estate|home_care)$")
 
 class AdAccountCreateRequest(BaseModel):
     provider: AdProvider
@@ -999,7 +999,6 @@ class AdAccountResponse(BaseModel):
     status: AdAccountStatus
     linked_connector_account_id: uuid.UUID | None = None
     created_at: datetime
-
 
 class AdCampaignCreateRequest(BaseModel):
     provider: AdProvider
@@ -1106,4 +1105,66 @@ class AdSpendLedgerResponse(BaseModel):
     clicks: int | None = None
     source: str
     created_at: datetime
+
+
+class DataRetentionPolicyResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    entity_type: str
+    retention_days: int
+    hard_delete_after_days: int
+    created_at: datetime
+
+
+class DataRetentionPolicyPatchItem(BaseModel):
+    entity_type: str = Field(min_length=1, max_length=80)
+    retention_days: int = Field(ge=1, le=3650)
+    hard_delete_after_days: int = Field(ge=1, le=7300)
+
+
+class DataRetentionPolicyPatchRequest(BaseModel):
+    policies: list[DataRetentionPolicyPatchItem] = Field(default_factory=list, min_length=1, max_length=50)
+
+
+class DSARRequestCreateRequest(BaseModel):
+    request_type: str = Field(pattern="^(access|delete|export)$")
+    subject_identifier: str = Field(min_length=3, max_length=255)
+
+
+class DSARRequestProcessResponse(BaseModel):
+    id: uuid.UUID
+    status: str
+    export_ref: str | None = None
+    completed_at: datetime | None = None
+
+
+class DSARRequestResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    request_type: str
+    subject_identifier: str
+    status: str
+    requested_at: datetime
+    completed_at: datetime | None = None
+    export_ref: str | None = None
+    created_at: datetime
+
+
+class RBACMatrixResponse(BaseModel):
+    roles: dict[str, list[str]]
+
+
+class PermissionAuditReportResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    findings_json: list[dict[str, object]]
+    recommendations_json: list[str]
+    created_at: datetime
+
+
+class EvidenceBundleResponse(BaseModel):
+    from_date: date
+    to_date: date
+    include_pii: bool = False
+    bundle_json: dict[str, object]
 

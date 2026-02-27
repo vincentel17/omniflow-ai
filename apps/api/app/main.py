@@ -10,6 +10,7 @@ from .routers.approvals import router as approvals_router
 from .routers.audit import router as audit_router
 from .routers.brand import router as brand_router
 from .routers.campaigns import router as campaigns_router
+from .routers.compliance import router as compliance_router
 from .routers.connectors import router as connectors_router
 from .routers.content import router as content_router
 from .routers.events import router as events_router
@@ -65,3 +66,6 @@ app.include_router(real_estate_router)
 app.include_router(workflows_router)
 app.include_router(approvals_router)
 app.include_router(ads_router)
+app.include_router(compliance_router)
+
+

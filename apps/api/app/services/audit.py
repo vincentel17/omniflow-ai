@@ -5,6 +5,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from packages.security import redact_mapping
+
 from ..models import AuditLog, RiskTier
 from ..tenancy import RequestContext
 
@@ -24,7 +26,7 @@ def write_audit_log(
         action=action,
         target_type=target_type,
         target_id=target_id,
-        metadata_json=metadata_json or {},
+        metadata_json=redact_mapping(metadata_json or {}),
         risk_tier=risk_tier,
     )
     db.add(entry)
@@ -47,9 +49,12 @@ def write_system_audit_log(
         action=action,
         target_type=target_type,
         target_id=target_id,
-        metadata_json=metadata_json or {},
+        metadata_json=redact_mapping(metadata_json or {}),
         risk_tier=risk_tier,
     )
     db.add(entry)
     db.flush()
     return entry
+
+
+

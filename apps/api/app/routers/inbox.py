@@ -7,6 +7,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from packages.policy import apply_inbound_safety_filters
+from packages.security import detect_pii
 from packages.schemas import NormalizedThread, ReplySuggestionJSON
 
 from ..db import get_db
@@ -22,6 +23,7 @@ from ..schemas import (
 )
 from ..services.audit import write_audit_log
 from ..services.events import write_event
+from ..services.org_settings import get_org_settings_payload
 from ..services.phase3 import get_vertical_pack_slug, utcnow
 from ..services.phase4 import build_mock_reply_suggestion
 from ..services.policy import load_policy_engine
@@ -120,6 +122,10 @@ def ingest_mock_thread(
         safety = apply_inbound_safety_filters(message.body_text)
         validation = policy.validate_content(safety.sanitized_text, context={"channel": "inbox"})
         flags = dict(safety.flags)
+        pii_flags = detect_pii(safety.sanitized_text)
+        if pii_flags.get("contains_health"):
+            flags["health_related"] = True
+            flags["needs_human_review"] = True
         if not validation.allowed:
             flags["policy_blocked"] = True
             flags["needs_human_review"] = True
@@ -335,6 +341,29 @@ def suggest_reply(
         )
     ).all()
     transcript = "\n".join(message.body_text for message in reversed(messages))
+    settings_payload = get_org_settings_payload(db=db, org_id=context.current_org_id)
+    compliance_mode = str(settings_payload.get("compliance_mode", "none"))
+    health_thread = any((message.flags_json or {}).get("health_related") is True for message in messages if isinstance(message.flags_json, dict))
+    if compliance_mode == "home_care" and health_thread:
+        write_audit_log(
+            db=db,
+            context=context,
+            action="inbox.reply_suggestion_blocked",
+            target_type="inbox_thread",
+            target_id=str(thread.id),
+            metadata_json={"reason": "home_care_health_related"},
+            risk_tier=RiskTier.TIER_3,
+        )
+        db.commit()
+        return ReplySuggestionResponse(
+            intent="escalate",
+            reply_text="This thread contains health-related content and requires human review.",
+            followup_questions=[],
+            risk_tier=RiskTier.TIER_3,
+            required_disclaimers=[],
+            policy_warnings=["home_care_health_related_requires_approval"],
+        )
+
     suggestion = build_mock_reply_suggestion(db=db, org_id=context.current_org_id, transcript=transcript)
 
     pack_slug = get_vertical_pack_slug(db=db, org_id=context.current_org_id)
@@ -395,6 +424,25 @@ def draft_reply(
     )
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="thread not found")
+    settings_payload = get_org_settings_payload(db=db, org_id=context.current_org_id)
+    compliance_mode = str(settings_payload.get("compliance_mode", "none"))
+    recent_messages = db.scalars(
+        org_scoped(
+            select(InboxMessage)
+            .where(InboxMessage.thread_id == thread.id, InboxMessage.deleted_at.is_(None))
+            .order_by(desc(InboxMessage.created_at))
+            .limit(12),
+            context.current_org_id,
+            InboxMessage,
+        )
+    ).all()
+    health_thread = any((message.flags_json or {}).get("health_related") is True for message in recent_messages if isinstance(message.flags_json, dict))
+    if compliance_mode == "home_care" and health_thread:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="home care compliance blocks auto-reply drafting for health-related threads",
+        )
+
     policy = load_policy_engine(get_vertical_pack_slug(db=db, org_id=context.current_org_id))
     validation = policy.validate_content(payload.body_text, context={"channel": "inbox"})
     flags = {"policy_blocked": not validation.allowed, "needs_human_review": not validation.allowed}
@@ -422,6 +470,17 @@ def draft_reply(
     db.commit()
     db.refresh(draft)
     return _serialize_message(draft)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
