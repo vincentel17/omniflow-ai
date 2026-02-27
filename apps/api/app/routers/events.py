@@ -8,6 +8,7 @@ from ..db import get_db
 from ..models import Event, Role
 from ..schemas import EventCreateRequest, EventResponse
 from ..services.audit import write_audit_log
+from ..services.events import write_event
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
 from packages.events import EventPayload, build_event_payload
 
@@ -34,9 +35,18 @@ def create_event(
             payload_json=payload.payload_json,
         )
     )
-    event = Event(org_id=context.current_org_id, **event_payload)
-    db.add(event)
-    db.flush()
+    event = write_event(
+        db=db,
+        org_id=context.current_org_id,
+        source=str(event_payload["source"]),
+        channel=str(event_payload["channel"]),
+        event_type=str(event_payload["type"]),
+        payload_json=dict(event_payload.get("payload_json", {})),
+        campaign_id=event_payload.get("campaign_id"),
+        content_id=event_payload.get("content_id"),
+        lead_id=event_payload.get("lead_id"),
+        actor_id=event_payload.get("actor_id"),
+    )
 
     write_audit_log(
         db=db,

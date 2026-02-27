@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "key": "re_new_lead_consultation",
+      "name": "RE New Lead Consultation",
+      "enabled": true,
+      "managed_by_pack": true,
+      "definition_json": {
+        "id": "re_new_lead_consultation",
+        "name": "RE New Lead Consultation",
+        "enabled": true,
+        "trigger": { "type": "EVENT", "event_type": "LEAD_CREATED" },
+        "conditions": [
+          { "type": "event.type_equals", "value": "LEAD_CREATED" },
+          { "type": "event.payload_match", "key": "classification", "value": "buyer" },
+          { "type": "vertical_pack_equals", "pack_slug": "real-estate" }
+        ],
+        "actions": [
+          {
+            "type": "CREATE_TASK",
+            "params_json": {
+              "title": "Schedule buyer consultation",
+              "template_key": "re_consultation"
+            }
+          },
+          {
+            "type": "APPLY_NURTURE_PLAN",
+            "params_json": {
+              "template_key": "re_buyer_welcome"
+            }
+          }
+        ],
+        "max_runs_per_day": 200,
+        "cooldown_minutes": 5,
+        "autonomy": {
+          "max_auto_tier": 1,
+          "require_approval_for_actions": []
+        },
+        "metadata": {
+          "vertical_pack": "real-estate",
+          "version": 1
+        }
+      }
+    },
+    {
+      "key": "re_under_contract_checklist",
+      "name": "RE Under Contract Checklist",
+      "enabled": true,
+      "managed_by_pack": true,
+      "definition_json": {
+        "id": "re_under_contract_checklist",
+        "name": "RE Under Contract Checklist",
+        "enabled": true,
+        "trigger": { "type": "EVENT", "event_type": "DEAL_STAGE_CHANGED" },
+        "conditions": [
+          { "type": "event.type_equals", "value": "DEAL_STAGE_CHANGED" },
+          { "type": "event.payload_match", "key": "pipeline_stage", "value": "Under Contract" },
+          { "type": "vertical_pack_equals", "pack_slug": "real-estate" }
+        ],
+        "actions": [
+          {
+            "type": "CREATE_TASK",
+            "params_json": {
+              "title": "Apply transaction checklist",
+              "template_key": "re_under_contract_checklist"
+            }
+          },
+          {
+            "type": "TAG_LEAD",
+            "params_json": {
+              "tags": ["under-contract"]
+            }
+          }
+        ],
+        "max_runs_per_day": 200,
+        "cooldown_minutes": 5,
+        "autonomy": {
+          "max_auto_tier": 1,
+          "require_approval_for_actions": []
+        },
+        "metadata": {
+          "vertical_pack": "real-estate",
+          "version": 1
+        }
+      }
+    },
+    {
+      "key": "re_listing_package_to_drafts",
+      "name": "RE Listing Package To Drafts",
+      "enabled": true,
+      "managed_by_pack": true,
+      "definition_json": {
+        "id": "re_listing_package_to_drafts",
+        "name": "RE Listing Package To Drafts",
+        "enabled": true,
+        "trigger": { "type": "EVENT", "event_type": "LISTING_PACKAGE_APPROVED" },
+        "conditions": [
+          { "type": "event.type_equals", "value": "LISTING_PACKAGE_APPROVED" },
+          { "type": "vertical_pack_equals", "pack_slug": "real-estate" }
+        ],
+        "actions": [
+          {
+            "type": "CREATE_CONTENT_DRAFT",
+            "params_json": {
+              "template_key": "re_listing_social"
+            }
+          }
+        ],
+        "max_runs_per_day": 100,
+        "cooldown_minutes": 10,
+        "autonomy": {
+          "max_auto_tier": 1,
+          "require_approval_for_actions": []
+        },
+        "metadata": {
+          "vertical_pack": "real-estate",
+          "version": 1
+        }
+      }
+    },
+    {
+      "key": "re_closed_won_followup",
+      "name": "RE Closed Won Follow-up",
+      "enabled": true,
+      "managed_by_pack": true,
+      "definition_json": {
+        "id": "re_closed_won_followup",
+        "name": "RE Closed Won Follow-up",
+        "enabled": true,
+        "trigger": { "type": "EVENT", "event_type": "CLOSED_WON" },
+        "conditions": [
+          { "type": "event.type_equals", "value": "CLOSED_WON" },
+          { "type": "vertical_pack_equals", "pack_slug": "real-estate" }
+        ],
+        "actions": [
+          {
+            "type": "CREATE_TASK",
+            "params_json": {
+              "title": "Start review request campaign",
+              "template_key": "re_review_campaign"
+            }
+          },
+          {
+            "type": "CREATE_CONTENT_DRAFT",
+            "params_json": {
+              "template_key": "re_post_close_social_pack"
+            }
+          }
+        ],
+        "max_runs_per_day": 100,
+        "cooldown_minutes": 60,
+        "autonomy": {
+          "max_auto_tier": 1,
+          "require_approval_for_actions": []
+        },
+        "metadata": {
+          "vertical_pack": "real-estate",
+          "version": 1
+        }
+      }
+    }
+  ]
+}

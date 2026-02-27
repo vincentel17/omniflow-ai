@@ -35,6 +35,7 @@ from app.models import (
     SLAConfig,
 )
 from app.services.connector_manager import get_publisher
+from app.services.events import write_event
 from app.services.live_publishers import ConnectorError
 
 broker_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -69,6 +70,20 @@ def _org_connector_mode(db: Session, org_id: uuid.UUID) -> str:
     if isinstance(raw, str) and raw in {"mock", "live"}:
         return raw
     return os.getenv("CONNECTOR_MODE", "mock")
+
+def _as_int(value: object, default: int) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return default
+    return default
 
 
 _PROVIDER_PREFIX = {
@@ -167,15 +182,14 @@ def _write_system_event(
     content_id: uuid.UUID,
     payload: dict[str, object] | None = None,
 ) -> None:
-    db.add(
-        Event(
-            org_id=org_id,
-            source="worker",
-            channel=channel,
-            type=event_type,
-            content_id=str(content_id),
-            payload_json=payload or {},
-        )
+    write_event(
+        db=db,
+        org_id=org_id,
+        source="worker",
+        channel=channel,
+        event_type=event_type,
+        content_id=str(content_id),
+        payload_json=payload or {},
     )
 
 
@@ -650,4 +664,636 @@ def reputation_sla_tick() -> int:
             created += 1
         db.commit()
     return created
+
+
+def _first_member_user_id(db: Session, org_id: uuid.UUID) -> uuid.UUID | None:
+    from app.models import Membership
+
+    row = db.scalar(
+        select(Membership).where(Membership.org_id == org_id, Membership.deleted_at.is_(None)).order_by(Membership.created_at)
+    )
+    return row.user_id if row is not None else None
+
+
+def _risk_tier_enum(value: int) -> RiskTier:
+    mapping = {
+        0: RiskTier.TIER_0,
+        1: RiskTier.TIER_1,
+        2: RiskTier.TIER_2,
+        3: RiskTier.TIER_3,
+        4: RiskTier.TIER_4,
+    }
+    return mapping.get(max(0, min(4, int(value))), RiskTier.TIER_2)
+
+
+def _workflow_event_payload(base: dict[str, object], run_id: uuid.UUID, depth: int) -> dict[str, object]:
+    payload = dict(base)
+    payload["workflow_origin"] = {"workflow_run_id": str(run_id), "depth": depth}
+    return payload
+
+
+def _sanitize_workflow_error(value: object) -> str:
+    message = str(value)
+    lowered = message.lower()
+    if "token" in lowered or "authorization" in lowered or "bearer" in lowered:
+        return "redacted-sensitive-error"
+    return message[:500]
+
+
+def _execute_workflow_action(db: Session, action_run_id: uuid.UUID) -> dict[str, object]:
+    from app.models import (
+        CampaignPlan,
+        CampaignPlanStatus,
+        ConnectorWorkflowRun,
+        ContentItem,
+        ContentItemStatus,
+        InboxMessage,
+        InboxMessageDirection,
+        Lead,
+        LeadAssignment,
+        NurtureTask,
+        NurtureTaskStatus,
+        NurtureTaskType,
+        PresenceAuditRun,
+        PresenceAuditRunStatus,
+        PublishJob,
+        PublishJobStatus,
+        WorkflowActionRun,
+        WorkflowRun,
+    )
+    from app.services.phase4 import choose_round_robin_assignee
+
+    action_run = db.scalar(
+        select(WorkflowActionRun).where(WorkflowActionRun.id == action_run_id, WorkflowActionRun.deleted_at.is_(None))
+    )
+    if action_run is None:
+        return {"result": "missing"}
+
+    workflow_run = db.scalar(
+        select(WorkflowRun).where(WorkflowRun.id == action_run.workflow_run_id, WorkflowRun.deleted_at.is_(None))
+    )
+    if workflow_run is None:
+        return {"result": "missing_workflow_run"}
+
+    input_json = action_run.input_json if isinstance(action_run.input_json, dict) else {}
+    raw_params = input_json.get("params_json")
+    params = raw_params if isinstance(raw_params, dict) else {}
+    action_type = action_run.action_type
+    org_id = action_run.org_id
+
+
+    if action_type == "CREATE_TASK":
+        lead_id_raw = params.get("lead_id")
+        if not lead_id_raw:
+            trigger_event = db.scalar(select(Event).where(Event.id == workflow_run.trigger_event_id, Event.deleted_at.is_(None)))
+            lead_id_raw = str(trigger_event.lead_id) if trigger_event is not None and trigger_event.lead_id else None
+        if not lead_id_raw:
+            raise ValueError("CREATE_TASK requires lead_id")
+        lead_id = uuid.UUID(str(lead_id_raw))
+        task = NurtureTask(
+            org_id=org_id,
+            lead_id=lead_id,
+            type=NurtureTaskType.TASK,
+            due_at=_now() + timedelta(minutes=_as_int(params.get("due_in_minutes", 30), 30)),
+            status=NurtureTaskStatus.OPEN,
+            template_key=str(params.get("template_key", "workflow_task")),
+            payload_json={"title": str(params.get("title", "Workflow task"))},
+            created_by=None,
+        )
+        db.add(task)
+        db.flush()
+        return {"task_id": str(task.id)}
+
+    if action_type == "ROUTE_LEAD":
+        if not _org_feature_enabled(db=db, org_id=org_id, key="enable_auto_lead_routing", fallback=True):
+            raise ValueError("ROUTE_LEAD blocked by org setting")
+        lead_id = uuid.UUID(str(params.get("lead_id")))
+        assignee, rationale = choose_round_robin_assignee(db=db, org_id=org_id)
+        existing = db.scalar(
+            select(LeadAssignment).where(
+                LeadAssignment.org_id == org_id,
+                LeadAssignment.lead_id == lead_id,
+                LeadAssignment.deleted_at.is_(None),
+            )
+        )
+        if existing is None:
+            existing = LeadAssignment(
+                org_id=org_id,
+                lead_id=lead_id,
+                assigned_to_user_id=assignee,
+                rule_applied=rationale,
+            )
+            db.add(existing)
+        else:
+            existing.assigned_to_user_id = assignee
+            existing.rule_applied = rationale
+        db.flush()
+        return {"lead_id": str(lead_id), "assigned_to_user_id": str(assignee), "rule": rationale}
+
+    if action_type == "APPLY_NURTURE_PLAN":
+        if not _org_feature_enabled(db=db, org_id=org_id, key="enable_auto_nurture_apply", fallback=False):
+            raise ValueError("APPLY_NURTURE_PLAN blocked by org setting")
+        lead_id = uuid.UUID(str(params.get("lead_id")))
+        task = NurtureTask(
+            org_id=org_id,
+            lead_id=lead_id,
+            type=NurtureTaskType.TASK,
+            due_at=_now() + timedelta(minutes=_as_int(params.get("due_in_minutes", 60), 60)),
+            status=NurtureTaskStatus.OPEN,
+            template_key=str(params.get("template_key", "nurture_followup")),
+            payload_json={"message_body": str(params.get("message_body", "Follow up with this lead"))},
+            created_by=None,
+        )
+        db.add(task)
+        db.flush()
+        return {"task_id": str(task.id)}
+
+    if action_type == "CREATE_CONTENT_DRAFT":
+        creator = _first_member_user_id(db=db, org_id=org_id)
+        if creator is None:
+            raise ValueError("No org member available to own campaign plan")
+        week_start = _now().date()
+        plan = db.scalar(
+            select(CampaignPlan).where(
+                CampaignPlan.org_id == org_id,
+                CampaignPlan.week_start_date == week_start,
+                CampaignPlan.deleted_at.is_(None),
+            )
+        )
+        if plan is None:
+            plan = CampaignPlan(
+                org_id=org_id,
+                vertical_pack_slug=str(params.get("vertical_pack", "generic")),
+                week_start_date=week_start,
+                status=CampaignPlanStatus.DRAFT,
+                created_by=creator,
+                plan_json={},
+                metadata_json={"source": "workflow"},
+            )
+            db.add(plan)
+            db.flush()
+        item = ContentItem(
+            org_id=org_id,
+            campaign_plan_id=plan.id,
+            channel=str(params.get("channel", "web")),
+            account_ref=str(params.get("account_ref", "default")),
+            status=ContentItemStatus.DRAFT,
+            content_json={"template_key": str(params.get("template_key", "workflow"))},
+            text_rendered=str(params.get("text", "Workflow generated draft")),
+            media_refs_json=[],
+            link_url=None,
+            tags_json=["workflow"],
+            risk_tier=_risk_tier_enum(_as_int(params.get("risk_tier", 1), 1)),
+            policy_warnings_json=[],
+        )
+        db.add(item)
+        db.flush()
+        return {"content_item_id": str(item.id)}
+
+    if action_type == "SCHEDULE_PUBLISH":
+        if not _org_feature_enabled(db=db, org_id=org_id, key="enable_auto_posting", fallback=False):
+            raise ValueError("SCHEDULE_PUBLISH blocked by org setting")
+        content_item_id = uuid.UUID(str(params.get("content_item_id")))
+        content = db.scalar(
+            select(ContentItem).where(
+                ContentItem.id == content_item_id,
+                ContentItem.org_id == org_id,
+                ContentItem.deleted_at.is_(None),
+            )
+        )
+        if content is None:
+            raise ValueError("content item not found")
+        if content.status not in {ContentItemStatus.APPROVED, ContentItemStatus.SCHEDULED, ContentItemStatus.DRAFT}:
+            raise ValueError("content is not in schedulable status")
+        job = db.scalar(
+            select(PublishJob).where(
+                PublishJob.org_id == org_id,
+                PublishJob.content_item_id == content.id,
+                PublishJob.deleted_at.is_(None),
+            )
+        )
+        if job is None:
+            job = PublishJob(
+                org_id=org_id,
+                content_item_id=content.id,
+                provider=str(params.get("provider", "mock-provider")),
+                account_ref=str(params.get("account_ref", content.account_ref)),
+                schedule_at=None,
+                status=PublishJobStatus.QUEUED,
+                idempotency_key=f"workflow:{action_run.id}",
+                attempts=0,
+            )
+            db.add(job)
+            db.flush()
+        return {"publish_job_id": str(job.id)}
+
+    if action_type == "RUN_PRESENCE_AUDIT":
+        if not _org_feature_enabled(db=db, org_id=org_id, key="enable_scheduled_audits", fallback=True):
+            raise ValueError("RUN_PRESENCE_AUDIT blocked by org setting")
+        run = PresenceAuditRun(
+            org_id=org_id,
+            started_at=_now(),
+            completed_at=_now(),
+            status=PresenceAuditRunStatus.SUCCEEDED,
+            inputs_json={"mode": "workflow"},
+            summary_scores_json={"overall_score": 80},
+            notes_json={"source": "workflow"},
+            error_json={},
+        )
+        db.add(run)
+        db.flush()
+        return {"presence_audit_run_id": str(run.id)}
+
+    if action_type == "DRAFT_REPLY":
+        thread_id = uuid.UUID(str(params.get("thread_id")))
+        message = InboxMessage(
+            org_id=org_id,
+            thread_id=thread_id,
+            external_message_id=f"draft-{action_run.id}",
+            direction=InboxMessageDirection.OUTBOUND,
+            sender_ref="workflow",
+            sender_display="Workflow Draft",
+            body_text=str(params.get("body_text", "Draft response generated by workflow")),
+            body_raw_json={"mode": "draft"},
+            flags_json={"draft": True},
+        )
+        db.add(message)
+        db.flush()
+        return {"inbox_message_id": str(message.id)}
+
+    if action_type == "TAG_LEAD":
+        lead_id = uuid.UUID(str(params.get("lead_id")))
+        lead = db.scalar(select(Lead).where(Lead.id == lead_id, Lead.org_id == org_id, Lead.deleted_at.is_(None)))
+        if lead is None:
+            raise ValueError("lead not found")
+        existing_raw = lead.tags_json if isinstance(lead.tags_json, list) else []
+        existing_tags = [str(item) for item in existing_raw]
+        additions = params.get("tags", [])
+        tags = [str(item) for item in additions] if isinstance(additions, list) else []
+        lead.tags_json = sorted(set(existing_tags + tags))
+        db.flush()
+        return {"lead_id": str(lead.id), "tags": lead.tags_json}
+
+    if action_type == "WEBHOOK":
+        row = ConnectorWorkflowRun(
+            org_id=org_id,
+            provider="webhook",
+            account_ref=str(params.get("endpoint", "workflow-webhook")),
+            operation="webhook",
+            idempotency_key=f"workflow-webhook:{action_run.id}",
+            status="queued",
+            attempt_count=0,
+            max_attempts=1,
+            payload_json={"url": params.get("url"), "body": params.get("body")},
+            result_json={},
+        )
+        db.add(row)
+        db.flush()
+        return {"connector_workflow_run_id": str(row.id), "status": "queued"}
+
+    raise ValueError(f"Unsupported action type: {action_type}")
+
+
+@app.task(name="worker.workflow.evaluate")
+def workflow_evaluate(event_id: str) -> str:
+    from app.models import (
+        Approval,
+        ApprovalEntityType,
+        ApprovalStatus,
+        Event,
+        Workflow,
+        WorkflowActionRun,
+        WorkflowActionRunStatus,
+        WorkflowRun,
+        WorkflowRunStatus,
+        WorkflowTriggerType,
+    )
+    from app.services.workflows import (
+        action_idempotency_key,
+        current_vertical_pack,
+        evaluate_definition,
+        event_depth,
+        local_hour_for_org,
+        org_automation_limits,
+        settings_for_org,
+    )
+
+    with SessionLocal() as db:
+        row = db.scalar(select(Event).where(Event.id == uuid.UUID(event_id), Event.deleted_at.is_(None)))
+        if row is None:
+            return "missing_event"
+
+        settings_payload = settings_for_org(db=db, org_id=row.org_id)
+        limits = org_automation_limits(settings_payload)
+        current_depth = event_depth(row.payload_json if isinstance(row.payload_json, dict) else {})
+        if current_depth >= limits["max_depth"]:
+            return "max_depth_reached"
+
+        hour_window_start = _now() - timedelta(hours=1)
+        recent_runs = db.scalar(
+            select(WorkflowRun)
+            .where(
+                WorkflowRun.org_id == row.org_id,
+                WorkflowRun.created_at >= hour_window_start,
+                WorkflowRun.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if recent_runs is not None:
+            run_count = len(
+                db.scalars(
+                    select(WorkflowRun.id).where(
+                        WorkflowRun.org_id == row.org_id,
+                        WorkflowRun.created_at >= hour_window_start,
+                        WorkflowRun.deleted_at.is_(None),
+                    )
+                ).all()
+            )
+            if run_count >= limits["max_workflow_runs_per_hour"]:
+                return "max_workflow_runs_per_hour_reached"
+
+        workflows = db.scalars(
+            select(Workflow).where(
+                Workflow.org_id == row.org_id,
+                Workflow.enabled.is_(True),
+                Workflow.trigger_type == WorkflowTriggerType.EVENT,
+                Workflow.deleted_at.is_(None),
+            )
+        ).all()
+
+        auto_tier = _as_int(settings_payload.get("default_autonomy_max_tier", 1), 1)
+        local_hour = local_hour_for_org(settings_payload)
+        vertical_pack = current_vertical_pack(db, row.org_id)
+        total_action_runs = 0
+
+        for workflow in workflows:
+            workflow_definition = workflow.definition_json if isinstance(workflow.definition_json, dict) else {}
+            now = _now()
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            max_runs_per_day = _as_int(workflow_definition.get("max_runs_per_day", 0), 0)
+            if max_runs_per_day > 0:
+                runs_today = len(
+                    db.scalars(
+                        select(WorkflowRun.id).where(
+                            WorkflowRun.org_id == row.org_id,
+                            WorkflowRun.workflow_id == workflow.id,
+                            WorkflowRun.created_at >= day_start,
+                            WorkflowRun.deleted_at.is_(None),
+                        )
+                    ).all()
+                )
+                if runs_today >= max_runs_per_day:
+                    run = WorkflowRun(
+                        org_id=row.org_id,
+                        workflow_id=workflow.id,
+                        trigger_event_id=row.id,
+                        status=WorkflowRunStatus.SKIPPED,
+                        started_at=now,
+                        finished_at=now,
+                        summary_json={"reason": "max_runs_per_day", "max_runs_per_day": max_runs_per_day},
+                        error_json={},
+                        loop_guard_hits=0,
+                    )
+                    db.add(run)
+                    db.flush()
+                    continue
+
+            cooldown_minutes = _as_int(workflow_definition.get("cooldown_minutes", 0), 0)
+            if cooldown_minutes > 0:
+                last_run = db.scalar(
+                    select(WorkflowRun)
+                    .where(
+                        WorkflowRun.org_id == row.org_id,
+                        WorkflowRun.workflow_id == workflow.id,
+                        WorkflowRun.deleted_at.is_(None),
+                    )
+                    .order_by(WorkflowRun.started_at.desc())
+                    .limit(1)
+                )
+                if last_run is not None and last_run.started_at is not None:
+                    if last_run.started_at >= now - timedelta(minutes=cooldown_minutes):
+                        run = WorkflowRun(
+                            org_id=row.org_id,
+                            workflow_id=workflow.id,
+                            trigger_event_id=row.id,
+                            status=WorkflowRunStatus.SKIPPED,
+                            started_at=now,
+                            finished_at=now,
+                            summary_json={"reason": "cooldown_minutes", "cooldown_minutes": cooldown_minutes},
+                            error_json={},
+                            loop_guard_hits=0,
+                        )
+                        db.add(run)
+                        db.flush()
+                        continue
+
+            run = WorkflowRun(
+                org_id=row.org_id,
+                workflow_id=workflow.id,
+                trigger_event_id=row.id,
+                status=WorkflowRunStatus.RUNNING,
+                started_at=now,
+                summary_json={},
+                error_json={},
+                loop_guard_hits=0,
+            )
+            db.add(run)
+            db.flush()
+
+            evaluation = evaluate_definition(
+                definition_json=workflow.definition_json,
+                event_type=row.type,
+                channel=row.channel,
+                payload_json=row.payload_json if isinstance(row.payload_json, dict) else {},
+                risk_tier=0,
+                org_settings=settings_payload,
+                vertical_pack=vertical_pack,
+                local_hour=local_hour,
+            )
+
+            if not evaluation.matched:
+                run.status = WorkflowRunStatus.SKIPPED
+                run.finished_at = _now()
+                run.summary_json = {"reason": evaluation.skipped_reason}
+                db.flush()
+                continue
+
+            created = 0
+            queued = 0
+            approvals = 0
+            succeeded = 0
+            for action in evaluation.actions:
+                if total_action_runs >= limits["max_actions_per_event"]:
+                    run.loop_guard_hits += 1
+                    break
+                action_run = WorkflowActionRun(
+                    org_id=row.org_id,
+                    workflow_run_id=run.id,
+                    action_type=action.action_type.value,
+                    status=WorkflowActionRunStatus.QUEUED,
+                    idempotency_key="pending",
+                    input_json={"params_json": action.params_json, "risk_tier": action.risk_tier, "depth": current_depth + 1},
+                    output_json={},
+                    error_json={},
+                )
+                db.add(action_run)
+                db.flush()
+                action_run.idempotency_key = action_idempotency_key(row.org_id, action_run)
+
+                requires_approval = action.requires_approval or action.risk_tier > auto_tier
+                if requires_approval:
+                    action_run.status = WorkflowActionRunStatus.APPROVAL_PENDING
+                    requester = _first_member_user_id(db=db, org_id=row.org_id)
+                    if requester is not None:
+                        db.add(
+                            Approval(
+                                org_id=row.org_id,
+                                entity_type=ApprovalEntityType.WORKFLOW_ACTION_RUN,
+                                entity_id=action_run.id,
+                                status=ApprovalStatus.PENDING,
+                                requested_by=requester,
+                                notes="Phase 10 risk-tier approval gate",
+                            )
+                        )
+                    approvals += 1
+                else:
+                    queued += 1
+                    app.send_task("worker.workflow.action.execute", args=[str(action_run.id)])
+
+                created += 1
+                total_action_runs += 1
+
+            if created == 0 and run.loop_guard_hits > 0:
+                run.status = WorkflowRunStatus.BLOCKED
+                run.summary_json = {"reason": "max_actions_per_event", "created_actions": 0}
+            elif approvals > 0 and queued == 0:
+                run.status = WorkflowRunStatus.APPROVAL_PENDING
+                run.summary_json = {"actions_created": created, "approval_pending": approvals}
+            else:
+                run.status = WorkflowRunStatus.QUEUED
+                run.summary_json = {"actions_created": created, "queued": queued, "approval_pending": approvals, "succeeded": succeeded}
+            run.finished_at = _now()
+            db.flush()
+
+        db.commit()
+    return "ok"
+
+
+@app.task(name="worker.workflow.action.execute", bind=True, max_retries=3, retry_backoff=True)
+def workflow_action_execute(self: Celery, action_run_id: str) -> str:
+    from app.models import WorkflowActionRun, WorkflowActionRunStatus, WorkflowRun, WorkflowRunStatus
+
+    with SessionLocal() as db:
+        action_run = db.scalar(
+            select(WorkflowActionRun).where(WorkflowActionRun.id == uuid.UUID(action_run_id), WorkflowActionRun.deleted_at.is_(None))
+        )
+        if action_run is None:
+            return "missing"
+        if action_run.status == WorkflowActionRunStatus.SUCCEEDED:
+            return "already_succeeded"
+        if action_run.status in {WorkflowActionRunStatus.BLOCKED, WorkflowActionRunStatus.SKIPPED, WorkflowActionRunStatus.APPROVAL_PENDING}:
+            return "blocked"
+
+        run = db.scalar(
+            select(WorkflowRun).where(WorkflowRun.id == action_run.workflow_run_id, WorkflowRun.deleted_at.is_(None))
+        )
+        if run is None:
+            return "missing_run"
+
+        action_input = action_run.input_json if isinstance(action_run.input_json, dict) else {}
+        depth = max(1, _as_int(action_input.get("depth", 1), 1))
+
+        action_run.status = WorkflowActionRunStatus.RUNNING
+        db.flush()
+
+        try:
+            output = _execute_workflow_action(db=db, action_run_id=action_run.id)
+            action_run.output_json = output
+            action_run.status = WorkflowActionRunStatus.SUCCEEDED
+            _write_system_event(
+                db=db,
+                org_id=action_run.org_id,
+                channel="automations",
+                event_type=f"WORKFLOW_ACTION_{action_run.action_type}_SUCCEEDED",
+                content_id=run.id,
+                payload=_workflow_event_payload({"workflow_run_id": str(run.id), "action_run_id": str(action_run.id)}, run.id, depth),
+            )
+            _write_system_audit(
+                db=db,
+                org_id=action_run.org_id,
+                action="workflow.action_executed",
+                target_type="workflow_action_run",
+                target_id=str(action_run.id),
+                risk_tier=_risk_tier_enum(_as_int(action_input.get("risk_tier", 1), 1)),
+                metadata={"action_type": action_run.action_type},
+            )
+            siblings = db.scalars(
+                select(WorkflowActionRun).where(
+                    WorkflowActionRun.workflow_run_id == run.id,
+                    WorkflowActionRun.deleted_at.is_(None),
+                )
+            ).all()
+            if siblings and all(item.status == WorkflowActionRunStatus.SUCCEEDED for item in siblings):
+                run.status = WorkflowRunStatus.SUCCEEDED
+                run.finished_at = _now()
+            db.commit()
+            return "succeeded"
+        except Exception as exc:
+            error_message = _sanitize_workflow_error(exc)
+            action_run.error_json = {"error": error_message}
+            if self.request.retries >= 2:
+                action_run.status = WorkflowActionRunStatus.FAILED
+                run.status = WorkflowRunStatus.FAILED
+                run.error_json = {"error": error_message, "action_run_id": str(action_run.id)}
+                run.finished_at = _now()
+                _write_system_event(
+                    db=db,
+                    org_id=action_run.org_id,
+                    channel="automations",
+                    event_type=f"WORKFLOW_ACTION_{action_run.action_type}_FAILED",
+                    content_id=run.id,
+                    payload={"workflow_run_id": str(run.id), "action_run_id": str(action_run.id), "error": error_message[:200]},
+                )
+                db.commit()
+                return "failed"
+            db.commit()
+            raise self.retry(exc=exc)
+
+
+@app.task(name="worker.workflow.approval.apply")
+def workflow_approval_apply(approval_id: str) -> str:
+    from app.models import Approval, ApprovalEntityType, ApprovalStatus, WorkflowActionRun, WorkflowActionRunStatus
+
+    with SessionLocal() as db:
+        row = db.scalar(select(Approval).where(Approval.id == uuid.UUID(approval_id), Approval.deleted_at.is_(None)))
+        if row is None:
+            return "missing"
+        if row.entity_type != ApprovalEntityType.WORKFLOW_ACTION_RUN:
+            return "unsupported_entity"
+        action_run = db.scalar(
+            select(WorkflowActionRun).where(WorkflowActionRun.id == row.entity_id, WorkflowActionRun.deleted_at.is_(None))
+        )
+        if action_run is None:
+            return "missing_action_run"
+        if row.status == ApprovalStatus.APPROVED:
+            action_run.status = WorkflowActionRunStatus.QUEUED
+            db.commit()
+            app.send_task("worker.workflow.action.execute", args=[str(action_run.id)])
+            return "queued"
+        if row.status == ApprovalStatus.REJECTED:
+            action_run.status = WorkflowActionRunStatus.BLOCKED
+            db.commit()
+            return "rejected"
+        return "pending"
+
+
+
+
+
+
+
+
+
+
+
 

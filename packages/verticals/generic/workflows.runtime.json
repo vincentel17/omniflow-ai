@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "key": "generic_new_lead_followup",
+      "name": "New Lead Follow-Up",
+      "enabled": true,
+      "managed_by_pack": true,
+      "definition_json": {
+        "id": "generic_new_lead_followup",
+        "name": "New Lead Follow-Up",
+        "enabled": true,
+        "trigger": { "type": "EVENT", "event_type": "LEAD_CREATED" },
+        "conditions": [
+          { "type": "event.type_equals", "value": "LEAD_CREATED" }
+        ],
+        "actions": [
+          { "type": "ROUTE_LEAD", "params_json": {} },
+          {
+            "type": "CREATE_TASK",
+            "params_json": {
+              "title": "First response",
+              "template_key": "first_response"
+            }
+          }
+        ],
+        "max_runs_per_day": 200,
+        "cooldown_minutes": 5,
+        "autonomy": {
+          "max_auto_tier": 1,
+          "require_approval_for_actions": []
+        },
+        "metadata": {
+          "vertical_pack": "generic",
+          "version": 1
+        }
+      }
+    },
+    {
+      "key": "generic_inbox_respond_task",
+      "name": "Inbox Respond Task",
+      "enabled": true,
+      "managed_by_pack": true,
+      "definition_json": {
+        "id": "generic_inbox_respond_task",
+        "name": "Inbox Respond Task",
+        "enabled": true,
+        "trigger": { "type": "EVENT", "event_type": "INBOX_INGESTED" },
+        "conditions": [
+          { "type": "event.type_equals", "value": "INBOX_INGESTED" }
+        ],
+        "actions": [
+          {
+            "type": "CREATE_TASK",
+            "params_json": {
+              "title": "Respond to inbound thread",
+              "template_key": "inbox_response"
+            }
+          }
+        ],
+        "max_runs_per_day": 200,
+        "cooldown_minutes": 2,
+        "autonomy": {
+          "max_auto_tier": 1,
+          "require_approval_for_actions": []
+        },
+        "metadata": {
+          "vertical_pack": "generic",
+          "version": 1
+        }
+      }
+    },
+    {
+      "key": "generic_presence_findings_task",
+      "name": "Presence Findings Follow-up",
+      "enabled": true,
+      "managed_by_pack": true,
+      "definition_json": {
+        "id": "generic_presence_findings_task",
+        "name": "Presence Findings Follow-up",
+        "enabled": true,
+        "trigger": { "type": "EVENT", "event_type": "PRESENCE_AUDIT_RUN" },
+        "conditions": [
+          { "type": "event.type_equals", "value": "PRESENCE_AUDIT_RUN" },
+          { "type": "event.payload_match", "key": "summary.overall_score", "value": 0 }
+        ],
+        "actions": [
+          {
+            "type": "CREATE_TASK",
+            "params_json": {
+              "title": "Fix top presence findings",
+              "template_key": "presence_findings"
+            }
+          }
+        ],
+        "max_runs_per_day": 100,
+        "cooldown_minutes": 15,
+        "autonomy": {
+          "max_auto_tier": 1,
+          "require_approval_for_actions": []
+        },
+        "metadata": {
+          "vertical_pack": "generic",
+          "version": 1
+        }
+      }
+    }
+  ]
+}

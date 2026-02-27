@@ -8,6 +8,16 @@ from sqlalchemy.orm import Session
 from ..models import Event
 
 
+def _enqueue_workflow_evaluation(event_id: uuid.UUID) -> None:
+    try:
+        from omniflow_worker.main import app as worker_app  # type: ignore
+
+        worker_app.send_task("worker.workflow.evaluate", args=[str(event_id)])
+    except Exception:
+        # Keep event writes non-blocking even if worker broker is unavailable.
+        return
+
+
 def write_event(
     db: Session,
     org_id: uuid.UUID,
@@ -33,4 +43,5 @@ def write_event(
     )
     db.add(event)
     db.flush()
+    _enqueue_workflow_evaluation(event.id)
     return event

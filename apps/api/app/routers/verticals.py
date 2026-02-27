@@ -9,6 +9,7 @@ from ..models import Role, VerticalPack
 from ..schemas import VerticalPackResponse, VerticalPackSelectRequest
 from ..services.audit import write_audit_log
 from ..services.verticals import list_available_packs
+from ..services.workflows import seed_pack_workflows
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
 
 router = APIRouter(prefix="/verticals", tags=["verticals"])
@@ -38,7 +39,9 @@ def select_pack(
         db.add(existing)
     else:
         existing.pack_slug = payload.pack_slug
+
     db.flush()
+    seeded_workflows = seed_pack_workflows(db=db, org_id=context.current_org_id, pack_slug=payload.pack_slug)
 
     write_audit_log(
         db=db,
@@ -46,7 +49,7 @@ def select_pack(
         action="vertical_pack.selected",
         target_type="vertical_pack",
         target_id=str(existing.id),
-        metadata_json={"pack_slug": payload.pack_slug},
+        metadata_json={"pack_slug": payload.pack_slug, "seeded_workflows": seeded_workflows},
     )
     db.commit()
     db.refresh(existing)

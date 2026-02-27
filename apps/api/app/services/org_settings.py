@@ -29,6 +29,12 @@ DEFAULT_ORG_SETTINGS: dict[str, Any] = {
     },
     "ai_mode": "mock",
     "max_auto_approve_tier": 1,
+    "max_actions_per_event": 10,
+    "max_workflow_runs_per_hour": 30,
+    "max_depth": 3,
+    "default_autonomy_max_tier": 1,
+    "business_hours_start_hour": 9,
+    "business_hours_end_hour": 17,
 }
 
 
@@ -45,6 +51,12 @@ def _safe_mode(value: Any, fallback: str) -> str:
 def _safe_tier(value: Any, fallback: int) -> int:
     if isinstance(value, int):
         return max(0, min(4, value))
+    return fallback
+
+
+def _safe_int(value: Any, fallback: int, *, minimum: int, maximum: int) -> int:
+    if isinstance(value, int):
+        return max(minimum, min(maximum, value))
     return fallback
 
 
@@ -96,6 +108,42 @@ def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     normalized["max_auto_approve_tier"] = _safe_tier(
         source.get("max_auto_approve_tier"),
         int(DEFAULT_ORG_SETTINGS["max_auto_approve_tier"]),
+    )
+    normalized["max_actions_per_event"] = _safe_int(
+        source.get("max_actions_per_event"),
+        int(DEFAULT_ORG_SETTINGS["max_actions_per_event"]),
+        minimum=1,
+        maximum=200,
+    )
+    normalized["max_workflow_runs_per_hour"] = _safe_int(
+        source.get("max_workflow_runs_per_hour"),
+        int(DEFAULT_ORG_SETTINGS["max_workflow_runs_per_hour"]),
+        minimum=1,
+        maximum=500,
+    )
+    normalized["max_depth"] = _safe_int(
+        source.get("max_depth"),
+        int(DEFAULT_ORG_SETTINGS["max_depth"]),
+        minimum=1,
+        maximum=10,
+    )
+    normalized["default_autonomy_max_tier"] = _safe_int(
+        source.get("default_autonomy_max_tier"),
+        int(DEFAULT_ORG_SETTINGS["default_autonomy_max_tier"]),
+        minimum=0,
+        maximum=4,
+    )
+    normalized["business_hours_start_hour"] = _safe_int(
+        source.get("business_hours_start_hour"),
+        int(DEFAULT_ORG_SETTINGS["business_hours_start_hour"]),
+        minimum=0,
+        maximum=23,
+    )
+    normalized["business_hours_end_hour"] = _safe_int(
+        source.get("business_hours_end_hour"),
+        int(DEFAULT_ORG_SETTINGS["business_hours_end_hour"]),
+        minimum=0,
+        maximum=23,
     )
     if isinstance(source.get("automation_weights"), dict):
         normalized["automation_weights"] = source["automation_weights"]

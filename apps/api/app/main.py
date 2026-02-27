@@ -4,27 +4,29 @@ from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import Response
 
-from .routers.audit import router as audit_router
 from .routers.analytics import router as analytics_router
+from .routers.approvals import router as approvals_router
+from .routers.audit import router as audit_router
 from .routers.brand import router as brand_router
 from .routers.campaigns import router as campaigns_router
-from .routers.content import router as content_router
 from .routers.connectors import router as connectors_router
+from .routers.content import router as content_router
 from .routers.events import router as events_router
 from .routers.health import router as health_router
 from .routers.inbox import router as inbox_router
-from .routers.links import router as links_router
 from .routers.leads import router as leads_router
 from .routers.leads import sla_router
-from .routers.orgs import router as org_router
-from .routers.ops import router as ops_router
+from .routers.links import router as links_router
 from .routers.onboarding import router as onboarding_router
+from .routers.ops import router as ops_router
+from .routers.orgs import router as org_router
 from .routers.presence import router as presence_router
 from .routers.publish import router as publish_router
-from .routers.reputation import router as reputation_router
 from .routers.real_estate import router as real_estate_router
+from .routers.reputation import router as reputation_router
 from .routers.seo import router as seo_router
 from .routers.verticals import router as vertical_router
+from .routers.workflows import router as workflows_router
 
 app = FastAPI(title="OmniFlow API", version="0.1.0")
 
@@ -59,3 +61,5 @@ app.include_router(presence_router)
 app.include_router(seo_router)
 app.include_router(reputation_router)
 app.include_router(real_estate_router)
+app.include_router(workflows_router)
+app.include_router(approvals_router)

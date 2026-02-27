@@ -510,6 +510,12 @@ class OpsSettingsResponse(BaseModel):
     providers_enabled_json: dict[str, bool] = Field(default_factory=dict)
     ai_mode: str = Field(default="mock", pattern="^(mock|live)$")
     max_auto_approve_tier: int = Field(default=1, ge=0, le=4)
+    max_actions_per_event: int = Field(default=10, ge=1, le=200)
+    max_workflow_runs_per_hour: int = Field(default=30, ge=1, le=500)
+    max_depth: int = Field(default=3, ge=1, le=10)
+    default_autonomy_max_tier: int = Field(default=1, ge=0, le=4)
+    business_hours_start_hour: int = Field(default=9, ge=0, le=23)
+    business_hours_end_hour: int = Field(default=17, ge=0, le=23)
     automation_weights: dict[str, int] = Field(default_factory=dict)
 
 
@@ -525,8 +531,13 @@ class OpsSettingsPatchRequest(BaseModel):
     providers_enabled_json: dict[str, bool] | None = None
     ai_mode: str | None = Field(default=None, pattern="^(mock|live)$")
     max_auto_approve_tier: int | None = Field(default=None, ge=0, le=4)
+    max_actions_per_event: int | None = Field(default=None, ge=1, le=200)
+    max_workflow_runs_per_hour: int | None = Field(default=None, ge=1, le=500)
+    max_depth: int | None = Field(default=None, ge=1, le=10)
+    default_autonomy_max_tier: int | None = Field(default=None, ge=0, le=4)
+    business_hours_start_hour: int | None = Field(default=None, ge=0, le=23)
+    business_hours_end_hour: int | None = Field(default=None, ge=0, le=23)
     automation_weights: dict[str, int] | None = None
-
 
 class OnboardingSessionResponse(BaseModel):
     id: uuid.UUID
@@ -843,5 +854,94 @@ class REListingPackageResponse(BaseModel):
     social_campaign_pack_json: dict[str, object]
     risk_tier: RiskTier
     policy_warnings_json: list[str]
+    created_at: datetime
+
+
+
+class WorkflowCreateRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=255)
+    enabled: bool = True
+    definition_json: dict[str, object]
+    managed_by_pack: bool = False
+
+
+class WorkflowUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    enabled: bool | None = None
+    definition_json: dict[str, object] | None = None
+
+
+class WorkflowResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    key: str
+    name: str
+    enabled: bool
+    trigger_type: str
+    managed_by_pack: bool
+    definition_json: dict[str, object]
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowTestRequest(BaseModel):
+    event_type: str = Field(min_length=1, max_length=100)
+    channel: str = Field(min_length=1, max_length=100)
+    payload_json: dict[str, object] = Field(default_factory=dict)
+    risk_tier: int = Field(default=0, ge=0, le=4)
+
+
+class WorkflowActionPreview(BaseModel):
+    action_type: str
+    params_json: dict[str, object]
+    risk_tier: int
+    requires_approval: bool
+
+
+class WorkflowTestResponse(BaseModel):
+    matched: bool
+    skipped_reason: str | None = None
+    overall_risk_tier: int = 0
+    actions: list[WorkflowActionPreview] = Field(default_factory=list)
+
+
+class WorkflowRunResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    workflow_id: uuid.UUID
+    trigger_event_id: uuid.UUID | None
+    status: str
+    started_at: datetime | None
+    finished_at: datetime | None
+    summary_json: dict[str, object]
+    error_json: dict[str, object]
+    loop_guard_hits: int
+    created_at: datetime
+
+
+class WorkflowActionRunResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    workflow_run_id: uuid.UUID
+    action_type: str
+    status: str
+    idempotency_key: str
+    input_json: dict[str, object]
+    output_json: dict[str, object]
+    error_json: dict[str, object]
+    created_at: datetime
+
+
+class ApprovalResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    entity_type: str
+    entity_id: uuid.UUID
+    status: ApprovalStatus
+    requested_by: uuid.UUID
+    decided_by: uuid.UUID | None
+    decided_at: datetime | None
+    notes: str | None
     created_at: datetime
 

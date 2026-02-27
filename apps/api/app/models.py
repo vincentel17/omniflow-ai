@@ -53,6 +53,8 @@ class ApprovalEntityType(str, enum.Enum):
     CAMPAIGN_PLAN = "campaign_plan"
     CONTENT_ITEM = "content_item"
     PUBLISH_JOB = "publish_job"
+    WORKFLOW_RUN = "workflow_run"
+    WORKFLOW_ACTION_RUN = "workflow_action_run"
 
 
 class ApprovalStatus(str, enum.Enum):
@@ -68,6 +70,30 @@ class PublishJobStatus(str, enum.Enum):
     FAILED = "failed"
     CANCELED = "canceled"
 
+
+class WorkflowTriggerType(str, enum.Enum):
+    EVENT = "event"
+    SCHEDULE = "schedule"
+
+
+class WorkflowRunStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    APPROVAL_PENDING = "approval_pending"
+    SKIPPED = "skipped"
+
+
+class WorkflowActionRunStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    APPROVAL_PENDING = "approval_pending"
+    SKIPPED = "skipped"
 
 class InboxThreadType(str, enum.Enum):
     COMMENT = "comment"
@@ -447,6 +473,71 @@ class ConnectorDeadLetter(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     payload_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
 
+
+class Workflow(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "workflows"
+    __table_args__ = (
+        UniqueConstraint("org_id", "key", name="uq_workflows_org_key"),
+        Index("ix_workflows_org_id", "org_id"),
+        Index("ix_workflows_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    trigger_type: Mapped[WorkflowTriggerType] = mapped_column(
+        Enum(WorkflowTriggerType, name="workflow_trigger_type_enum", values_callable=_enum_values),
+        nullable=False,
+        default=WorkflowTriggerType.EVENT,
+    )
+    managed_by_pack: Mapped[bool] = mapped_column(nullable=False, default=False)
+    definition_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class WorkflowRun(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "workflow_runs"
+    __table_args__ = (
+        Index("ix_workflow_runs_org_id", "org_id"),
+        Index("ix_workflow_runs_created_at", "created_at"),
+        Index("ix_workflow_runs_org_workflow_started_at", "org_id", "workflow_id", "started_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflows.id"), nullable=False)
+    trigger_event_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("events.id"), nullable=True)
+    status: Mapped[WorkflowRunStatus] = mapped_column(
+        Enum(WorkflowRunStatus, name="workflow_run_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=WorkflowRunStatus.QUEUED,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    summary_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    error_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    loop_guard_hits: Mapped[int] = mapped_column(nullable=False, default=0)
+
+
+class WorkflowActionRun(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "workflow_action_runs"
+    __table_args__ = (
+        UniqueConstraint("org_id", "idempotency_key", name="uq_workflow_action_runs_org_idempotency"),
+        Index("ix_workflow_action_runs_org_id", "org_id"),
+        Index("ix_workflow_action_runs_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    workflow_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflow_runs.id"), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[WorkflowActionRunStatus] = mapped_column(
+        Enum(WorkflowActionRunStatus, name="workflow_action_run_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=WorkflowActionRunStatus.QUEUED,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    input_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    output_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    error_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
 
 class CampaignPlan(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "campaign_plans"
@@ -1138,4 +1229,8 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+
+
 
