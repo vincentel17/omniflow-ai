@@ -4,10 +4,12 @@ from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .routers.admin import router as admin_router
 from .routers.ads import router as ads_router
 from .routers.analytics import router as analytics_router
 from .routers.approvals import router as approvals_router
 from .routers.audit import router as audit_router
+from .routers.billing import router as billing_router
 from .routers.brand import router as brand_router
 from .routers.campaigns import router as campaigns_router
 from .routers.compliance import router as compliance_router
@@ -44,6 +46,7 @@ async def request_id_middleware(request: Request, call_next) -> Response:  # typ
 
 app.include_router(health_router)
 app.include_router(org_router)
+app.include_router(admin_router)
 app.include_router(ops_router)
 app.include_router(onboarding_router)
 app.include_router(vertical_router)
@@ -65,7 +68,6 @@ app.include_router(reputation_router)
 app.include_router(real_estate_router)
 app.include_router(workflows_router)
 app.include_router(approvals_router)
+app.include_router(billing_router)
 app.include_router(ads_router)
 app.include_router(compliance_router)
-
-

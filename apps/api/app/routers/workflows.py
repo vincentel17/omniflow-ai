@@ -19,6 +19,7 @@ from ..schemas import (
     WorkflowUpdateRequest,
 )
 from ..services.audit import write_audit_log
+from ..services.billing import ensure_org_active
 from ..services.events import write_event
 from ..services.workflows import (
     current_vertical_pack,
@@ -85,6 +86,7 @@ def create_workflow(
     context: RequestContext = Depends(get_request_context),
 ) -> WorkflowResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     exists = db.scalar(
         org_scoped(
             select(Workflow).where(Workflow.key == payload.key, Workflow.deleted_at.is_(None)),
@@ -244,6 +246,7 @@ def update_workflow(
     context: RequestContext = Depends(get_request_context),
 ) -> WorkflowResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     workflow = _get_workflow_or_404(db=db, org_id=context.current_org_id, workflow_id=workflow_id)
 
     if payload.name is not None:
@@ -295,6 +298,7 @@ def dry_run_workflow(
     context: RequestContext = Depends(get_request_context),
 ) -> WorkflowTestResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     workflow = _get_workflow_or_404(db=db, org_id=context.current_org_id, workflow_id=workflow_id)
     org_settings = settings_for_org(db, context.current_org_id)
     evaluated = evaluate_definition(
@@ -321,3 +325,5 @@ def dry_run_workflow(
             for action in evaluated.actions
         ],
     )
+
+

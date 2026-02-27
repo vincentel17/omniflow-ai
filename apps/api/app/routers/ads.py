@@ -48,6 +48,7 @@ from ..services.ads import (
     patch_ads_settings_for_org,
 )
 from ..services.audit import write_audit_log
+from ..services.billing import ensure_org_active
 from ..services.events import write_event
 from ..services.org_settings import get_org_settings_payload
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
@@ -197,6 +198,7 @@ def patch_ads_settings(
     context: RequestContext = Depends(get_request_context),
 ) -> AdsSettingsResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     payload = patch_ads_settings_for_org(db=db, org_id=context.current_org_id, patch=req.model_dump(exclude_none=True))
     write_audit_log(
         db=db,
@@ -217,6 +219,7 @@ def create_account(
     context: RequestContext = Depends(get_request_context),
 ) -> AdAccountResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = AdAccount(
         org_id=context.current_org_id,
         provider=req.provider,
@@ -270,6 +273,7 @@ def create_campaign(
     context: RequestContext = Depends(get_request_context),
 ) -> AdCampaignResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     ad_account = db.scalar(
         org_scoped(
             select(AdAccount).where(AdAccount.id == req.ad_account_id, AdAccount.deleted_at.is_(None)),
@@ -353,6 +357,7 @@ def update_campaign(
     context: RequestContext = Depends(get_request_context),
 ) -> AdCampaignResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = _get_campaign_or_404(db, context.current_org_id, campaign_id)
     patch = req.model_dump(exclude_none=True)
     settings_payload = get_org_settings_payload(db=db, org_id=context.current_org_id)
@@ -398,6 +403,7 @@ def request_activation(
     context: RequestContext = Depends(get_request_context),
 ) -> AdCampaignResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = _get_campaign_or_404(db, context.current_org_id, campaign_id)
     create_ads_approval(
         db=db,
@@ -420,6 +426,7 @@ def activate_campaign(
     context: RequestContext = Depends(get_request_context),
 ) -> AdCampaignResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = _get_campaign_or_404(db, context.current_org_id, campaign_id)
     settings_payload = get_org_settings_payload(db=db, org_id=context.current_org_id)
     if settings_payload.get("require_approval_for_ads") is True:
@@ -464,6 +471,7 @@ def pause_campaign(
     context: RequestContext = Depends(get_request_context),
 ) -> AdCampaignResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = _get_campaign_or_404(db, context.current_org_id, campaign_id)
     row.status = AdCampaignStatus.PAUSED
     write_event(
@@ -488,6 +496,7 @@ def create_creative(
     context: RequestContext = Depends(get_request_context),
 ) -> AdCreativeResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     _get_campaign_or_404(db, context.current_org_id, campaign_id)
     tracked = db.scalar(
         org_scoped(
@@ -559,6 +568,7 @@ def approve_creative(
     context: RequestContext = Depends(get_request_context),
 ) -> AdCreativeResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = db.scalar(
         org_scoped(
             select(AdCreative).where(AdCreative.id == creative_id, AdCreative.deleted_at.is_(None)),
@@ -582,6 +592,7 @@ def create_experiment(
     context: RequestContext = Depends(get_request_context),
 ) -> AdExperimentResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     _get_campaign_or_404(db, context.current_org_id, campaign_id)
     row = AdExperiment(
         org_id=context.current_org_id,
@@ -607,6 +618,7 @@ def start_experiment(
     context: RequestContext = Depends(get_request_context),
 ) -> AdExperimentResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = db.scalar(
         org_scoped(
             select(AdExperiment).where(AdExperiment.id == experiment_id, AdExperiment.deleted_at.is_(None)),
@@ -638,6 +650,7 @@ def stop_experiment(
     context: RequestContext = Depends(get_request_context),
 ) -> AdExperimentResponse:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     row = db.scalar(
         org_scoped(
             select(AdExperiment).where(AdExperiment.id == experiment_id, AdExperiment.deleted_at.is_(None)),
@@ -683,6 +696,7 @@ def sync_metrics(
     context: RequestContext = Depends(get_request_context),
 ) -> dict[str, object]:
     require_role(context, Role.ADMIN)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     campaigns = db.scalars(
         org_scoped(
             select(AdCampaign).where(AdCampaign.status == AdCampaignStatus.ACTIVE, AdCampaign.deleted_at.is_(None)),
@@ -746,6 +760,8 @@ def list_metrics(
         )
     ).all()
     return [_serialize_ledger(row) for row in rows]
+
+
 
 
 

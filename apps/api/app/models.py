@@ -145,6 +145,28 @@ class AdExperimentStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+
+class BillingSubscriptionStatus(str, enum.Enum):
+    TRIALING = "trialing"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    CANCELED = "canceled"
+    SUSPENDED = "suspended"
+
+
+class OrgStatus(str, enum.Enum):
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    CANCELED = "canceled"
+
+
+class UsageMetricType(str, enum.Enum):
+    POST_CREATED = "post_created"
+    AI_GENERATION = "ai_generation"
+    WORKFLOW_EXECUTED = "workflow_executed"
+    AD_IMPRESSION = "ad_impression"
+    USER_CREATED = "user_created"
+
 class DSARRequestType(str, enum.Enum):
     ACCESS = "access"
     DELETE = "delete"
@@ -348,6 +370,11 @@ class Org(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __table_args__ = (UniqueConstraint("name", name="uq_orgs_name"), Index("ix_orgs_created_at", "created_at"))
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    org_status: Mapped[OrgStatus] = mapped_column(
+        Enum(OrgStatus, name="org_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=OrgStatus.ACTIVE,
+    )
 
 
 class User(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -846,6 +873,73 @@ class AdSpendLedger(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     clicks: Mapped[int | None] = mapped_column(nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="mock")
 
+
+
+class SubscriptionPlan(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "subscription_plans"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_subscription_plans_name"),
+        Index("ix_subscription_plans_created_at", "created_at"),
+    )
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    price_monthly_usd: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    price_yearly_usd: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    entitlements_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class OrgSubscription(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "org_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("org_id", name="uq_org_subscriptions_org_id"),
+        UniqueConstraint("stripe_customer_id", name="uq_org_subscriptions_stripe_customer"),
+        UniqueConstraint("stripe_subscription_id", name="uq_org_subscriptions_stripe_subscription"),
+        Index("ix_org_subscriptions_org_status", "org_id", "status"),
+        Index("ix_org_subscriptions_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subscription_plans.id"), nullable=False)
+    status: Mapped[BillingSubscriptionStatus] = mapped_column(
+        Enum(BillingSubscriptionStatus, name="billing_subscription_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=BillingSubscriptionStatus.TRIALING,
+    )
+    current_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class UsageMetric(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "usage_metrics"
+    __table_args__ = (
+        UniqueConstraint("org_id", "metric_type", "period_start", "period_end", name="uq_usage_metrics_period"),
+        Index("ix_usage_metrics_org_metric_period", "org_id", "metric_type", "period_start"),
+        Index("ix_usage_metrics_org_created_at", "org_id", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    metric_type: Mapped[UsageMetricType] = mapped_column(
+        Enum(UsageMetricType, name="usage_metric_type_enum", values_callable=_enum_values),
+        nullable=False,
+    )
+    count: Mapped[int] = mapped_column(nullable=False, default=0)
+    period_start: Mapped[date] = mapped_column(nullable=False)
+    period_end: Mapped[date] = mapped_column(nullable=False)
+
+
+class GlobalAdmin(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "global_admins"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_global_admins_user_id"),
+        Index("ix_global_admins_created_at", "created_at"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    active: Mapped[bool] = mapped_column(nullable=False, default=True)
 
 class OrgSettings(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "org_settings"
@@ -1483,6 +1577,11 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+
+
+
 
 
 

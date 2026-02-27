@@ -23,6 +23,10 @@ from app.models import (
     NurtureTaskType,
     Org,
     OrgSettings,
+    OrgStatus,
+    OrgSubscription,
+    UsageMetric,
+    UsageMetricType,
     PresenceAuditRun,
     PresenceAuditRunStatus,
     PresenceTask,
@@ -71,6 +75,12 @@ def _org_connector_mode(db: Session, org_id: uuid.UUID) -> str:
         return raw
     return os.getenv("CONNECTOR_MODE", "mock")
 
+
+def _org_is_active(db: Session, org_id: uuid.UUID) -> bool:
+    row = db.scalar(select(Org).where(Org.id == org_id, Org.deleted_at.is_(None)))
+    if row is None:
+        return False
+    return row.org_status == OrgStatus.ACTIVE
 def _as_int(value: object, default: int) -> int:
     if isinstance(value, bool):
         return int(value)
@@ -230,6 +240,11 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
             return "already_succeeded"
         if job.status == PublishJobStatus.CANCELED:
             return "canceled"
+        if not _org_is_active(db=db, org_id=job.org_id):
+            job.status = PublishJobStatus.CANCELED
+            job.last_error = "ORG_NOT_ACTIVE"
+            db.commit()
+            return "org_not_active"
         if not _org_feature_enabled(db=db, org_id=job.org_id, key="enable_auto_posting", fallback=False):
             job.status = PublishJobStatus.CANCELED
             job.last_error = "auto posting disabled by org ops settings"
@@ -453,6 +468,8 @@ def scheduler_tick() -> int:
             )
         ).all()
         for row in rows:
+            if not _org_is_active(db=db, org_id=row.org_id):
+                continue
             if not _org_feature_enabled(db=db, org_id=row.org_id, key="enable_auto_posting", fallback=False):
                 continue
             publish_job_execute.delay(str(row.id))
@@ -982,6 +999,8 @@ def workflow_evaluate(event_id: str) -> str:
         row = db.scalar(select(Event).where(Event.id == uuid.UUID(event_id), Event.deleted_at.is_(None)))
         if row is None:
             return "missing_event"
+        if not _org_is_active(db=db, org_id=row.org_id):
+            return "org_not_active"
 
         settings_payload = settings_for_org(db=db, org_id=row.org_id)
         limits = org_automation_limits(settings_payload)
@@ -1201,6 +1220,14 @@ def workflow_action_execute(self: Celery, action_run_id: str) -> str:
         )
         if run is None:
             return "missing_run"
+        if not _org_is_active(db=db, org_id=action_run.org_id):
+            action_run.status = WorkflowActionRunStatus.BLOCKED
+            action_run.error_json = {"error": "ORG_NOT_ACTIVE"}
+            run.status = WorkflowRunStatus.BLOCKED
+            run.error_json = {"error": "ORG_NOT_ACTIVE", "action_run_id": str(action_run.id)}
+            run.finished_at = _now()
+            db.commit()
+            return "org_not_active"
 
         action_input = action_run.input_json if isinstance(action_run.input_json, dict) else {}
         depth = max(1, _as_int(action_input.get("depth", 1), 1))
@@ -1304,6 +1331,83 @@ def workflow_approval_apply(approval_id: str) -> str:
 
 
 
+
+@app.task(name="worker.billing.status_sync_tick")
+def billing_status_sync_tick() -> int:
+    from app.services.billing import apply_subscription_status_to_org
+
+    updated = 0
+    with SessionLocal() as db:
+        rows = db.scalars(select(OrgSubscription).where(OrgSubscription.deleted_at.is_(None))).all()
+        for row in rows:
+            previous = db.scalar(select(Org).where(Org.id == row.org_id, Org.deleted_at.is_(None)))
+            before = previous.org_status if previous is not None else None
+            after = apply_subscription_status_to_org(db=db, org_id=row.org_id)
+            if before is not None and before != after:
+                updated += 1
+                if after == OrgStatus.SUSPENDED:
+                    write_event(
+                        db=db,
+                        org_id=row.org_id,
+                        source="billing",
+                        channel="billing",
+                        event_type="ORG_SUSPENDED",
+                        payload_json={"reason": "subscription_status"},
+                    )
+        db.commit()
+    return updated
+
+
+@app.task(name="worker.usage.aggregator_tick")
+def usage_aggregator_tick() -> int:
+    month_start = _now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    metrics = {
+        "CONTENT_DRAFT_CREATED": UsageMetricType.POST_CREATED,
+        "AI_GENERATION_COMPLETED": UsageMetricType.AI_GENERATION,
+        "WORKFLOW_RUN_COMPLETED": UsageMetricType.WORKFLOW_EXECUTED,
+        "ADS_METRICS_SYNCED": UsageMetricType.AD_IMPRESSION,
+        "MEMBERSHIP_CREATED": UsageMetricType.USER_CREATED,
+    }
+
+    updated = 0
+    with SessionLocal() as db:
+        for event_type, metric_type in metrics.items():
+            rows = db.execute(
+                select(Event.org_id, func.count(Event.id))
+                .where(
+                    Event.type == event_type,
+                    Event.deleted_at.is_(None),
+                    Event.created_at >= month_start,
+                )
+                .group_by(Event.org_id)
+            ).all()
+            for org_id, count_raw in rows:
+                count = int(count_raw or 0)
+                if count <= 0:
+                    continue
+                row = db.scalar(
+                    select(UsageMetric).where(
+                        UsageMetric.org_id == org_id,
+                        UsageMetric.metric_type == metric_type,
+                        UsageMetric.period_start == month_start.date(),
+                        UsageMetric.deleted_at.is_(None),
+                    )
+                )
+                if row is None:
+                    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+                    row = UsageMetric(
+                        org_id=org_id,
+                        metric_type=metric_type,
+                        count=count,
+                        period_start=month_start.date(),
+                        period_end=month_end.date(),
+                    )
+                    db.add(row)
+                else:
+                    row.count = count
+                updated += 1
+        db.commit()
+    return updated
 @app.task(name="worker.retention.enforcer_tick")
 def retention_enforcer_tick() -> int:
     from app.models import DataRetentionPolicy, Lead
@@ -1344,3 +1448,10 @@ def retention_enforcer_tick() -> int:
                 )
         db.commit()
     return soft_deleted
+
+
+
+
+
+
+

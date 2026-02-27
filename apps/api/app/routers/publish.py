@@ -10,6 +10,7 @@ from ..db import get_db
 from ..models import ContentItem, ContentItemStatus, PublishJob, PublishJobStatus, Role
 from ..schemas import PublishJobCreateRequest, PublishJobResponse
 from ..services.audit import write_audit_log
+from ..services.billing import ensure_org_active
 from ..services.events import write_event
 from ..services.rate_limit import enforce_org_rate_limit
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
@@ -42,6 +43,7 @@ def create_publish_job(
     context: RequestContext = Depends(get_request_context),
 ) -> PublishJobResponse:
     require_role(context, Role.AGENT)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     enforce_org_rate_limit(org_id=context.current_org_id, bucket_name="publish_jobs", max_requests=30, window_seconds=60)
     item = db.scalar(
         org_scoped(
@@ -131,6 +133,7 @@ def cancel_publish_job(
     context: RequestContext = Depends(get_request_context),
 ) -> PublishJobResponse:
     require_role(context, Role.AGENT)
+    ensure_org_active(db=db, org_id=context.current_org_id)
     job = db.scalar(
         org_scoped(
             select(PublishJob).where(PublishJob.id == job_id, PublishJob.deleted_at.is_(None)),
@@ -166,3 +169,5 @@ def cancel_publish_job(
     db.commit()
     db.refresh(job)
     return _serialize_publish_job(job)
+
+

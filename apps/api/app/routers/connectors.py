@@ -21,6 +21,7 @@ from ..schemas import (
     ConnectorStartResponse,
 )
 from ..services.audit import write_audit_log
+from ..services.billing import ensure_org_active
 from ..services.connector_manager import verify_connector_health
 from ..services.events import write_event
 from ..services.oauth_state import consume_oauth_state, create_oauth_state
@@ -169,6 +170,8 @@ def start_oauth(
 
     state = create_oauth_state(get_redis_client(), context.current_org_id, provider)
     mode = connector_mode_for_org(db, context.current_org_id)
+    if mode == "live":
+        ensure_org_active(db=db, org_id=context.current_org_id)
     if mode == "mock":
         params = urlencode({"state": state, "code": "mock-code"})
         auth_url = f"{settings.oauth_redirect_uri}?{params}"
@@ -224,6 +227,8 @@ def oauth_callback(
     db.flush()
 
     mode = connector_mode_for_org(db, context.current_org_id)
+    if mode == "live":
+        ensure_org_active(db=db, org_id=context.current_org_id)
     access_token = f"mock-access-{provider}-{payload.account_ref}"
     refresh_token = f"mock-refresh-{provider}-{payload.account_ref}"
     granted_scopes = sorted(_REQUIRED_SCOPES.get(provider, {}).get("publish", set()) | _REQUIRED_SCOPES.get(provider, {}).get("inbox", set()))
@@ -544,3 +549,5 @@ def list_health(
         )
     ).all()
     return [_serialize_health(row) for row in rows]
+
+

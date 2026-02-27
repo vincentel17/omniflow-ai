@@ -102,7 +102,7 @@ def db_session(migrated_db: None, db_url: str) -> Generator[Session, None, None]
                 "re_listing_packages, re_cma_comparables, re_cma_reports, re_communication_logs, re_document_requests, "
                 "re_checklist_items, re_checklist_templates, re_deals, "
                 "onboarding_sessions, "
-                "connector_dead_letters, connector_workflow_runs, connector_health, oauth_tokens, connector_accounts, data_retention_policies, dsar_requests, permission_audit_reports, "
+                "connector_dead_letters, connector_workflow_runs, connector_health, oauth_tokens, connector_accounts, data_retention_policies, dsar_requests, permission_audit_reports, usage_metrics, org_subscriptions, subscription_plans, global_admins, "
                 "audit_logs, events, vertical_packs, integrations, memberships, users, orgs "
                 "RESTART IDENTITY CASCADE"
             )
@@ -133,4 +133,5 @@ def seeded_context(db_session: Session) -> dict[str, str]:
         "X-Omniflow-Org-Id": str(TEST_ORG_ID),
         "X-Omniflow-Role": Role.OWNER.value,
     }
+
 

@@ -1168,3 +1168,65 @@ class EvidenceBundleResponse(BaseModel):
     include_pii: bool = False
     bundle_json: dict[str, object]
 
+
+class BillingCheckoutRequest(BaseModel):
+    plan_id: uuid.UUID
+
+
+class BillingCheckoutResponse(BaseModel):
+    checkout_session_id: str
+    checkout_url: str
+
+
+class BillingPlanResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    price_monthly_usd: float
+    price_yearly_usd: float
+    entitlements_json: dict[str, object]
+    created_at: datetime
+
+
+class BillingSubscriptionResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    stripe_customer_id: str | None = None
+    stripe_subscription_id: str | None = None
+    plan_id: uuid.UUID
+    plan_name: str
+    status: str
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
+    trial_end: datetime | None = None
+    created_at: datetime
+
+
+class BillingStatusResponse(BaseModel):
+    org_status: str
+    subscription_status: str
+
+
+class BillingWebhookRequest(BaseModel):
+    event_type: str = Field(min_length=1, max_length=120)
+    data: dict[str, object] = Field(default_factory=dict)
+
+
+class AdminOrgResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    org_status: str
+    created_at: datetime
+
+
+class AdminImpersonationResponse(BaseModel):
+    org_id: uuid.UUID
+    impersonation_token: str
+    expires_at: datetime
+
+
+class AdminBillingOverviewResponse(BaseModel):
+    mrr_usd: float
+    arr_projection_usd: float
+    active_subscriptions: int
+    churn_count: int
+    plan_distribution: dict[str, int]

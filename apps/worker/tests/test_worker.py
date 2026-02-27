@@ -78,6 +78,7 @@ def test_scheduler_tick_skips_when_auto_posting_disabled(monkeypatch) -> None:
     delay_counter = _DelayCounter()
     monkeypatch.setattr(worker_main, "SessionLocal", lambda: _DummySession())
     monkeypatch.setattr(worker_main, "_org_feature_enabled", lambda db, org_id, key, fallback: False)
+    monkeypatch.setattr(worker_main, "_org_is_active", lambda db, org_id: True)
     monkeypatch.setattr(worker_main.publish_job_execute, "delay", delay_counter.delay)
 
     assert worker_main.scheduler_tick() == 0
