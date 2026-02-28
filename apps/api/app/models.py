@@ -438,6 +438,20 @@ class VerticalPack(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
     pack_slug: Mapped[str] = mapped_column(String(100), nullable=False)
 
+class VerticalPackRegistry(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "vertical_pack_registry"
+    __table_args__ = (
+        UniqueConstraint("slug", "version", name="uq_vertical_pack_registry_slug_version"),
+        Index("ix_vertical_pack_registry_installed_at", "installed_at"),
+        Index("ix_vertical_pack_registry_created_at", "created_at"),
+    )
+
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    checksum: Mapped[str] = mapped_column(String(128), nullable=False)
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
 
 class Event(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "events"
@@ -893,6 +907,8 @@ class SubscriptionPlan(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     price_monthly_usd: Mapped[float] = mapped_column(nullable=False, default=0.0)
     price_yearly_usd: Mapped[float] = mapped_column(nullable=False, default=0.0)
     entitlements_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    allowed_verticals_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    custom_pack_pricing_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
 
 
 class OrgSubscription(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
@@ -1670,6 +1686,9 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+
 
 
 

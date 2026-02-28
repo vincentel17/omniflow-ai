@@ -44,7 +44,7 @@ export default async function AdminPage() {
     <main className="page-shell space-y-6">
       <section className="surface-card p-6">
         <h1 className="page-title">Global Admin Console</h1>
-        <p className="page-subtitle">Cross-tenant operations, revenue overview, and controlled support access.</p>
+        <p className="page-subtitle">Cross-tenant operations, revenue overview, and controlled support access.</p>`r`n        <p className="mt-2 text-sm">`r`n          <a className="text-[rgb(var(--accent))] hover:underline" href="/admin/verticals">`r`n            View vertical registry`r`n          </a>`r`n        </p>
       </section>
 
       {state.notice ? <section className="surface-card p-4 text-sm text-amber-300">{state.notice}</section> : null}
@@ -68,3 +68,5 @@ export default async function AdminPage() {
     </main>
   );
 }
+
+

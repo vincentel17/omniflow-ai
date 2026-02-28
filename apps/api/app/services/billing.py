@@ -27,6 +27,8 @@ DEFAULT_PLANS: tuple[dict[str, Any], ...] = (
         "name": "Free",
         "price_monthly_usd": 0.0,
         "price_yearly_usd": 0.0,
+        "allowed_verticals_json": ["generic"],
+        "custom_pack_pricing_json": {},
         "entitlements_json": {
             "max_org_users": 2,
             "max_monthly_posts": 20,
@@ -43,6 +45,8 @@ DEFAULT_PLANS: tuple[dict[str, Any], ...] = (
         "name": "Starter",
         "price_monthly_usd": 49.0,
         "price_yearly_usd": 490.0,
+        "allowed_verticals_json": ["generic", "real-estate"],
+        "custom_pack_pricing_json": {},
         "entitlements_json": {
             "max_org_users": 5,
             "max_monthly_posts": 120,
@@ -59,6 +63,8 @@ DEFAULT_PLANS: tuple[dict[str, Any], ...] = (
         "name": "Growth",
         "price_monthly_usd": 199.0,
         "price_yearly_usd": 1990.0,
+        "allowed_verticals_json": ["generic", "real-estate", "home-care"],
+        "custom_pack_pricing_json": {},
         "entitlements_json": {
             "max_org_users": 20,
             "max_monthly_posts": 1000,
@@ -75,6 +81,8 @@ DEFAULT_PLANS: tuple[dict[str, Any], ...] = (
         "name": "Enterprise",
         "price_monthly_usd": 999.0,
         "price_yearly_usd": 9990.0,
+        "allowed_verticals_json": ["*"],
+        "custom_pack_pricing_json": {},
         "entitlements_json": {
             "max_org_users": 1000,
             "max_monthly_posts": 100000,
@@ -142,6 +150,8 @@ def seed_default_plans(db: Session) -> None:
                 price_monthly_usd=float(item["price_monthly_usd"]),
                 price_yearly_usd=float(item["price_yearly_usd"]),
                 entitlements_json=dict(item["entitlements_json"]),
+                allowed_verticals_json=list(item.get("allowed_verticals_json", [])),
+                custom_pack_pricing_json=dict(item.get("custom_pack_pricing_json", {})),
             )
         )
     db.flush()
@@ -191,6 +201,9 @@ def get_billing_snapshot(db: Session, org_id: uuid.UUID) -> BillingSnapshot:
     if plan is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="subscription plan missing")
     entitlements = plan.entitlements_json if isinstance(plan.entitlements_json, dict) else {}
+    if isinstance(plan.allowed_verticals_json, list):
+        entitlements = dict(entitlements)
+        entitlements["allowed_verticals"] = [str(item) for item in plan.allowed_verticals_json]
     return BillingSnapshot(
         org_status=org.org_status,
         subscription_status=sub.status,
@@ -356,6 +369,28 @@ def summarize_revenue(db: Session) -> dict[str, Any]:
     }
 
 
+
+def is_vertical_allowed(db: Session, org_id: uuid.UUID, pack_slug: str) -> bool:
+    snapshot = get_billing_snapshot(db=db, org_id=org_id)
+    if snapshot.subscription_status == BillingSubscriptionStatus.TRIALING:
+        return True
+    allowed = snapshot.entitlements.get("allowed_verticals")
+    if isinstance(allowed, list):
+        normalized = {str(item).strip().lower() for item in allowed}
+        if "*" in normalized:
+            return True
+        return pack_slug.strip().lower() in normalized
+
+    # Backward-compatible fallback for legacy booleans.
+    if pack_slug == "generic":
+        return True
+    if pack_slug == "real-estate":
+        return bool(snapshot.entitlements.get("real_estate_pack_enabled"))
+    if pack_slug == "home-care":
+        return bool(snapshot.entitlements.get("home_care_pack_enabled"))
+    return False
+
+
 def ensure_global_admin(db: Session, user_id: uuid.UUID) -> None:
     from ..models import GlobalAdmin
 
@@ -368,3 +403,9 @@ def ensure_global_admin(db: Session, user_id: uuid.UUID) -> None:
     )
     if row is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="global admin required")
+
+
+
+
+
+

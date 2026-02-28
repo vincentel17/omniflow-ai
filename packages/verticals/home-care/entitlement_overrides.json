@@ -1,0 +1,8 @@
+{
+  "allowed_verticals": [
+    "home-care"
+  ],
+  "required_features": [
+    "home_care_pack_enabled"
+  ]
+}

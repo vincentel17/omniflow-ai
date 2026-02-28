@@ -4,12 +4,18 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Org, OrgStatus, Role
-from ..schemas import AdminBillingOverviewResponse, AdminImpersonationResponse, AdminOrgResponse
+from ..models import Event, Org, OrgStatus, Role, VerticalPack, VerticalPackRegistry
+from ..schemas import (
+    AdminBillingOverviewResponse,
+    AdminImpersonationResponse,
+    AdminOrgResponse,
+    AdminVerticalPerformanceResponse,
+    AdminVerticalRegistryResponse,
+)
 from ..services.audit import write_audit_log
 from ..services.billing import ensure_global_admin, summarize_revenue
 from ..services.events import write_event
@@ -167,3 +173,79 @@ def billing_overview(
     _require_global_admin(db=db, context=context)
     snapshot = summarize_revenue(db=db)
     return AdminBillingOverviewResponse(**snapshot)
+
+
+@router.get("/vertical-performance", response_model=list[AdminVerticalPerformanceResponse])
+def vertical_performance(
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> list[AdminVerticalPerformanceResponse]:
+    _require_global_admin(db=db, context=context)
+
+    org_counts = {
+        str(slug): int(count)
+        for slug, count in db.execute(
+            select(VerticalPack.pack_slug, func.count(VerticalPack.id))
+            .where(VerticalPack.deleted_at.is_(None))
+            .group_by(VerticalPack.pack_slug)
+            .order_by(VerticalPack.pack_slug.asc())
+        ).all()
+    }
+
+    metric_rows = db.execute(
+        select(
+            VerticalPack.pack_slug,
+            func.sum(case((Event.type.like("%LEAD%"), 1), else_=0)),
+            func.sum(case((Event.type.like("%BILLING%"), 1), else_=0)),
+            func.sum(case((Event.type.like("%WORKFLOW%"), 1), else_=0)),
+            func.sum(case((Event.type.like("%PREDICTIVE%"), 1), else_=0)),
+        )
+        .select_from(VerticalPack)
+        .join(Event, Event.org_id == VerticalPack.org_id)
+        .where(VerticalPack.deleted_at.is_(None), Event.deleted_at.is_(None))
+        .group_by(VerticalPack.pack_slug)
+        .order_by(VerticalPack.pack_slug.asc())
+    ).all()
+
+    by_slug: dict[str, AdminVerticalPerformanceResponse] = {
+        slug: AdminVerticalPerformanceResponse(pack_slug=slug, org_count=count)
+        for slug, count in org_counts.items()
+    }
+
+    for slug, funnel, revenue, automation, predictive in metric_rows:
+        key = str(slug)
+        base = by_slug.get(key)
+        if base is None:
+            base = AdminVerticalPerformanceResponse(pack_slug=key, org_count=0)
+            by_slug[key] = base
+        base.funnel_events = int(funnel or 0)
+        base.revenue_events = int(revenue or 0)
+        base.automation_events = int(automation or 0)
+        base.predictive_events = int(predictive or 0)
+
+    return sorted(by_slug.values(), key=lambda item: item.pack_slug)
+
+
+@router.get("/verticals", response_model=list[AdminVerticalRegistryResponse])
+def list_vertical_registry(
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> list[AdminVerticalRegistryResponse]:
+    _require_global_admin(db=db, context=context)
+    rows = db.scalars(
+        select(VerticalPackRegistry)
+        .where(VerticalPackRegistry.deleted_at.is_(None))
+        .order_by(VerticalPackRegistry.installed_at.desc())
+    ).all()
+    return [
+        AdminVerticalRegistryResponse(
+            slug=row.slug,
+            version=row.version,
+            status=row.status,
+            checksum=row.checksum,
+            installed_at=row.installed_at,
+        )
+        for row in rows
+    ]
+
+

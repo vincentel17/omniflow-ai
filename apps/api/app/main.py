@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI
 from starlette.requests import Request
@@ -32,6 +33,7 @@ from .routers.reputation import router as reputation_router
 from .routers.seo import router as seo_router
 from .routers.verticals import router as vertical_router
 from .routers.workflows import router as workflows_router
+from .services.verticals import validate_pack
 
 app = FastAPI(title="OmniFlow API", version="0.1.0")
 
@@ -43,6 +45,20 @@ async def request_id_middleware(request: Request, call_next) -> Response:  # typ
     response = await call_next(request)
     response.headers["X-Request-Id"] = request_id
     return response
+
+
+@app.on_event("startup")
+def validate_vertical_packs_on_startup() -> None:
+    verticals_root = Path(__file__).resolve().parents[3] / "packages" / "verticals"
+    if not verticals_root.exists():
+        return
+    for entry in verticals_root.iterdir():
+        if not entry.is_dir():
+            continue
+        valid, errors = validate_pack(entry.name)
+        if not valid:
+            joined = "; ".join(errors)
+            raise RuntimeError(f"Invalid vertical pack '{entry.name}': {joined}")
 
 
 app.include_router(health_router)

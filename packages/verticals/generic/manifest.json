@@ -1,0 +1,14 @@
+{
+  "slug": "generic",
+  "name": "Generic",
+  "version": "2.0.0",
+  "compatible_core_version": ">=0.1.0",
+  "features": {
+    "pipelines": true,
+    "seo": true,
+    "compliance": true,
+    "ads": true,
+    "workflows": true,
+    "optimization": true
+  }
+}

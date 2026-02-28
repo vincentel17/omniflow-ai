@@ -1,9 +1,5 @@
-import { apiFetch } from "../../../lib/api";
+import { apiFetch, type VerticalPackManifest } from "../../../lib/api";
 import { VerticalSelector } from "./vertical-selector";
-
-type PackListResponse = {
-  packs: string[];
-};
 
 type CurrentPack = {
   id: string;
@@ -12,9 +8,8 @@ type CurrentPack = {
   created_at: string;
 };
 
-async function getPacks(): Promise<string[]> {
-  const result = await apiFetch<PackListResponse>("/verticals/packs");
-  return result.packs;
+async function getPacks(): Promise<VerticalPackManifest[]> {
+  return apiFetch<VerticalPackManifest[]>("/verticals/available");
 }
 
 async function getCurrentPack(): Promise<string | null> {
@@ -28,13 +23,26 @@ async function getCurrentPack(): Promise<string | null> {
 
 export default async function VerticalSettingsPage() {
   const [packs, currentPack] = await Promise.all([getPacks(), getCurrentPack()]);
+  const active = packs.find((pack) => pack.slug === currentPack) ?? null;
+
   return (
-    <main className="page-shell">
-      <h1 className="text-3xl font-semibold">Vertical Packs</h1>
-      <p className="mt-2 text-slate-300">Select the active pack for the current organization.</p>
-      <p className="mt-4 text-sm text-slate-400">Current: {currentPack ?? "none selected"}</p>
-      <VerticalSelector packs={packs} />
+    <main className="page-shell space-y-6">
+      <section className="surface-card p-6">
+        <h1 className="page-title">Vertical Packs</h1>
+        <p className="page-subtitle">Activate one validated industry pack for this org. Activation is plan-gated and audited.</p>
+        <p className="mt-3 text-sm text-[rgb(var(--muted-foreground))]">Current: {currentPack ?? "none selected"}</p>
+      </section>
+
+      {active ? (
+        <section className="surface-card p-4 text-sm text-[rgb(var(--muted-foreground))]">
+          <p className="font-medium text-[rgb(var(--foreground))]">Active manifest</p>
+          <p className="mt-2">{active.name} ({active.slug}) v{active.version}</p>
+          <p>Core compatibility: {active.compatible_core_version}</p>
+          <p className="break-all">Checksum: {active.checksum}</p>
+        </section>
+      ) : null}
+
+      <VerticalSelector currentPack={currentPack} packs={packs} />
     </main>
   );
 }
-

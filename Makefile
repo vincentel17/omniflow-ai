@@ -32,3 +32,9 @@ release-check:
 
 smoke:
 	powershell -ExecutionPolicy Bypass -File ./scripts/smoke.ps1
+
+create-vertical-pack:
+	python scripts/create-vertical-pack.py $(slug)
+
+validate-pack:
+	python scripts/validate-pack.py $(slug)

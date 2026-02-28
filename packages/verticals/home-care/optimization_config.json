@@ -1,0 +1,11 @@
+{
+  "lead_scoring_weights": {
+    "response_time": 0.35,
+    "message_count": 0.25,
+    "intake_completion": 0.2,
+    "care_urgency": 0.2
+  },
+  "posting_optimization_enabled": false,
+  "nurture_decay_factor": 0.8,
+  "ads_budget_strategy": "conservative"
+}

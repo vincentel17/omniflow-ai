@@ -1,0 +1,8 @@
+{
+  "allowed_verticals": [
+    "real-estate"
+  ],
+  "required_features": [
+    "real_estate_pack_enabled"
+  ]
+}

@@ -84,6 +84,24 @@ class VerticalPackResponse(BaseModel):
     created_at: datetime
 
 
+class VerticalPackManifestResponse(BaseModel):
+    slug: str
+    name: str
+    version: str
+    compatible_core_version: str
+    features: dict[str, bool]
+    checksum: str
+    status: str
+
+
+class AdminVerticalRegistryResponse(BaseModel):
+    slug: str
+    version: str
+    status: str
+    checksum: str
+    installed_at: datetime
+
+
 class EventCreateRequest(BaseModel):
     source: str
     channel: str
@@ -1231,6 +1249,14 @@ class AdminBillingOverviewResponse(BaseModel):
     churn_count: int
     plan_distribution: dict[str, int]
 
+class AdminVerticalPerformanceResponse(BaseModel):
+    pack_slug: str
+    org_count: int
+    funnel_events: int = 0
+    revenue_events: int = 0
+    automation_events: int = 0
+    predictive_events: int = 0
+
 class OrgOptimizationSettingsResponse(BaseModel):
     enable_predictive_scoring: bool = False
     enable_post_timing_optimization: bool = False
@@ -1333,6 +1359,12 @@ class ModelMetadataResponse(BaseModel):
 
 class ModelActivateRequest(BaseModel):
     version: str = Field(min_length=1, max_length=80)
+
+
+
+
+
+
 
 
 

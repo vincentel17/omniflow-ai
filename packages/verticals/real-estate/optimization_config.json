@@ -1,0 +1,12 @@
+{
+  "lead_scoring_weights": {
+    "response_time": 0.2,
+    "message_count": 0.2,
+    "listing_interest": 0.25,
+    "deal_stage_progression": 0.25,
+    "tags": 0.1
+  },
+  "posting_optimization_enabled": true,
+  "nurture_decay_factor": 0.65,
+  "ads_budget_strategy": "conservative"
+}

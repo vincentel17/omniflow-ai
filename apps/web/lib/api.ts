@@ -222,3 +222,48 @@ export async function scoreLeadPredictive(leadId: string): Promise<PredictiveLea
   return apiFetch<PredictiveLeadScore>(`/optimization/lead-score/${encodeURIComponent(leadId)}`, { method: "POST" });
 }
 
+
+export type VerticalPackManifest = {
+  slug: string;
+  name: string;
+  version: string;
+  compatible_core_version: string;
+  features: Record<string, boolean>;
+  checksum: string;
+  status: string;
+};
+
+export type AdminVerticalRegistryItem = {
+  slug: string;
+  version: string;
+  status: string;
+  checksum: string;
+  installed_at: string;
+};
+
+export async function listVerticalPacks(): Promise<VerticalPackManifest[]> {
+  return apiFetch<VerticalPackManifest[]>("/verticals/available");
+}
+
+export async function getVerticalPackManifest(slug: string): Promise<VerticalPackManifest> {
+  return apiFetch<VerticalPackManifest>(`/verticals/${encodeURIComponent(slug)}/manifest`);
+}
+
+export async function listAdminVerticalRegistry(): Promise<AdminVerticalRegistryItem[]> {
+  return apiFetch<AdminVerticalRegistryItem[]>("/admin/verticals");
+}
+
+export type AdminVerticalPerformanceItem = {
+  pack_slug: string;
+  org_count: number;
+  funnel_events: number;
+  revenue_events: number;
+  automation_events: number;
+  predictive_events: number;
+};
+
+export async function listAdminVerticalPerformance(): Promise<AdminVerticalPerformanceItem[]> {
+  return apiFetch<AdminVerticalPerformanceItem[]>("/admin/vertical-performance");
+}
+
+
