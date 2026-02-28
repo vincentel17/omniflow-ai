@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, select
@@ -14,6 +15,8 @@ from ..models import (
     BrandProfile,
     ContentItem,
     ContentItemStatus,
+    OrgOptimizationSettings,
+    PostingOptimization,
     PublishJob,
     PublishJobStatus,
     Role,
@@ -229,13 +232,62 @@ def schedule_content(
     if existing is not None:
         return _serialize_publish_job(existing)
 
+
+    schedule_at = payload.schedule_at
+    optimization_settings = db.scalar(
+        org_scoped(
+            select(OrgOptimizationSettings).where(OrgOptimizationSettings.deleted_at.is_(None)),
+            context.current_org_id,
+            OrgOptimizationSettings,
+        )
+    )
+    if optimization_settings is not None and optimization_settings.enable_post_timing_optimization:
+        profile = db.scalar(
+            org_scoped(
+                select(PostingOptimization)
+                .where(PostingOptimization.channel == item.channel, PostingOptimization.deleted_at.is_(None))
+                .order_by(desc(PostingOptimization.updated_at))
+                .limit(1),
+                context.current_org_id,
+                PostingOptimization,
+            )
+        )
+        if profile is not None:
+            baseline = schedule_at if schedule_at is not None else utcnow()
+            if baseline.tzinfo is None:
+                baseline = baseline.replace(tzinfo=UTC)
+            optimized = baseline.astimezone(UTC).replace(
+                hour=int(profile.best_hour) % 24,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+            if optimized <= utcnow():
+                optimized = optimized + timedelta(days=1)
+            schedule_at = optimized
+            write_event(
+                db=db,
+                org_id=context.current_org_id,
+                source="optimization",
+                channel=item.channel,
+                event_type="POST_SCHEDULE_OPTIMIZED",
+                content_id=str(item.id),
+                payload_json={
+                    "best_day_of_week": profile.best_day_of_week,
+                    "best_hour": profile.best_hour,
+                    "model_version": profile.model_version,
+                    "reversible": True,
+                    "risk_tier": int(item.risk_tier),
+                },
+                actor_id=str(context.current_user_id),
+            )
     idempotency_key = f"{context.current_org_id}:{item.id}:{payload.provider}:{payload.account_ref}"
     job = PublishJob(
         org_id=context.current_org_id,
         content_item_id=item.id,
         provider=payload.provider,
         account_ref=payload.account_ref,
-        schedule_at=payload.schedule_at,
+        schedule_at=schedule_at,
         status=PublishJobStatus.QUEUED,
         idempotency_key=idempotency_key,
         attempts=0,
@@ -275,3 +327,10 @@ def schedule_content(
     db.commit()
     db.refresh(job)
     return _serialize_publish_job(job)
+
+
+
+
+
+
+

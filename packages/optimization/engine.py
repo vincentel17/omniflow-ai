@@ -30,10 +30,25 @@ def extract_features(*, org_id: str, lead_id: str | None, payloads: list[dict[st
     response_minutes: list[float] = []
     clicks = 0
     tags_count = 0
+    stage_progressions = 0
+    content_performance = 0.0
+    ad_spend_total = 0.0
+    ad_conversions_total = 0.0
+    workflow_total = 0
+    workflow_success = 0
+    lead_source_weight = 0.0
 
     for payload in payloads:
-        if payload.get("event_type") == "INBOX_INGESTED":
+        event_type = payload.get("event_type")
+        if event_type == "INBOX_INGESTED":
             message_count += 1
+        if event_type in {"LEAD_STATUS_CHANGED", "DEAL_STAGE_CHANGED"}:
+            stage_progressions += 1
+        if event_type in {"WORKFLOW_RUN_COMPLETED", "WORKFLOW_ACTION_SUCCEEDED"}:
+            workflow_total += 1
+            workflow_success += 1
+        elif event_type in {"WORKFLOW_RUN_FAILED", "WORKFLOW_ACTION_FAILED"}:
+            workflow_total += 1
 
         response_value = payload.get("response_minutes")
         if isinstance(response_value, (int, float)) and not isinstance(response_value, bool):
@@ -47,12 +62,39 @@ def extract_features(*, org_id: str, lead_id: str | None, payloads: list[dict[st
         if isinstance(tags, list):
             tags_count += len(tags)
 
+        perf = payload.get("performance_score")
+        if isinstance(perf, (int, float)) and not isinstance(perf, bool):
+            content_performance += float(perf)
+
+        spend = payload.get("ad_spend_usd")
+        if isinstance(spend, (int, float)) and not isinstance(spend, bool):
+            ad_spend_total += float(spend)
+
+        conversions = payload.get("conversions")
+        if isinstance(conversions, (int, float)) and not isinstance(conversions, bool):
+            ad_conversions_total += float(conversions)
+
+        lead_source = payload.get("lead_source")
+        if isinstance(lead_source, str):
+            source = lead_source.lower()
+            if source in {"organic", "referral"}:
+                lead_source_weight += 1.0
+            elif source in {"paid", "cold"}:
+                lead_source_weight += 0.4
+
     avg_response = mean(response_minutes) if response_minutes else 0.0
+    workflow_success_rate = (workflow_success / max(1, workflow_total)) if workflow_total else 0.0
     features = {
         "message_count": float(message_count),
         "avg_response_minutes": float(avg_response),
         "link_clicks": float(clicks),
         "tags_count": float(tags_count),
+        "stage_progressions": float(stage_progressions),
+        "content_performance": float(content_performance),
+        "ad_spend_total": float(ad_spend_total),
+        "ad_conversions_total": float(ad_conversions_total),
+        "workflow_success_rate": float(workflow_success_rate),
+        "lead_source_weight": float(lead_source_weight),
     }
     return FeatureVector(org_id=org_id, lead_id=lead_id, feature_json=features)
 
@@ -63,14 +105,33 @@ def compute_predictive_score(feature_vector: FeatureVector) -> PredictiveLeadSco
     avg_response = features.get("avg_response_minutes", 0.0)
     clicks = features.get("link_clicks", 0.0)
     tags_count = features.get("tags_count", 0.0)
+    stage_progressions = features.get("stage_progressions", 0.0)
+    ad_spend_total = features.get("ad_spend_total", 0.0)
+    ad_conversions_total = features.get("ad_conversions_total", 0.0)
+    workflow_success_rate = features.get("workflow_success_rate", 0.0)
+    lead_source_weight = features.get("lead_source_weight", 0.0)
+    ad_efficiency = ad_conversions_total / max(1.0, ad_spend_total)
 
-    raw = (message_count * 0.2) + (clicks * 0.25) + (tags_count * 0.1) - (avg_response / 180.0)
+    raw = (
+        (message_count * 0.2)
+        + (clicks * 0.25)
+        + (tags_count * 0.1)
+        + (stage_progressions * 0.08)
+        + (workflow_success_rate * 0.12)
+        + (lead_source_weight * 0.05)
+        + (ad_efficiency * 0.2)
+        - (avg_response / 180.0)
+    )
     probability = _clamp(0.5 + raw, 0.01, 0.99)
 
     feature_importance = {
         "message_count": 0.2,
         "link_clicks": 0.25,
         "tags_count": 0.1,
+        "stage_progressions": 0.08,
+        "workflow_success_rate": 0.12,
+        "lead_source_weight": 0.05,
+        "ad_efficiency": 0.2,
         "avg_response_minutes": -0.15,
     }
     stage_probs = {
@@ -159,6 +220,7 @@ def workflow_recommendations(*, workflow_stats: list[dict[str, object]]) -> list
         key = str(row.get("workflow_key") or "workflow")
         success_rate = _to_float(row.get("success_rate"), 0.0)
         approval_latency = _to_float(row.get("approval_latency_minutes"), 0.0)
+        sla_breach_rate = _to_float(row.get("sla_breach_rate"), 0.0)
         if success_rate < 0.7:
             suggestions.append(
                 {
@@ -175,16 +237,38 @@ def workflow_recommendations(*, workflow_stats: list[dict[str, object]]) -> list
                     "priority": "medium",
                 }
             )
+        if sla_breach_rate > 0.2:
+            suggestions.append(
+                {
+                    "workflow_key": key,
+                    "suggestion": "SLA breaches are elevated; add a faster first-response action early in the sequence.",
+                    "priority": "high",
+                }
+            )
     return suggestions
 
 
 def build_next_best_action(*, entity_type: str, inactivity_hours: float, predictive_score: float, stage: str | None = None) -> NextBestActionResult:
+    if entity_type == "lead" and predictive_score >= 0.82 and inactivity_hours >= 48:
+        return NextBestActionResult(
+            action_type="request_review",
+            rationale="Lead has high conversion confidence and long inactivity; review request can re-engage with low execution risk.",
+            expected_uplift=0.2,
+            confidence_score=0.81,
+        )
     if entity_type == "lead" and predictive_score >= 0.7 and inactivity_hours >= 24:
         return NextBestActionResult(
             action_type="call",
             rationale="High-conversion lead is inactive; direct outreach is likely to recover momentum.",
             expected_uplift=0.18,
             confidence_score=0.79,
+        )
+    if entity_type == "deal" and stage in {"listing_prep", "listing_pending"}:
+        return NextBestActionResult(
+            action_type="create_listing_package",
+            rationale="Listing stage indicates packaging dependency; creating the package reduces go-live delays.",
+            expected_uplift=0.14,
+            confidence_score=0.75,
         )
     if entity_type == "deal" and stage in {"under_contract", "inspection"}:
         return NextBestActionResult(

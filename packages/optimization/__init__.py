@@ -9,6 +9,7 @@ from .engine import (
     extract_features,
     workflow_recommendations,
 )
+from .registry import ModelRegistry
 from .schema import (
     AdBudgetRecommendationResult,
     FeatureVector,
@@ -24,6 +25,7 @@ __all__ = [
     "AdBudgetRecommendationResult",
     "FeatureVector",
     "ModelDescriptor",
+    "ModelRegistry",
     "ModelStatus",
     "NextBestActionResult",
     "NurtureRecommendationResult",
@@ -39,3 +41,4 @@ __all__ = [
     "extract_features",
     "workflow_recommendations",
 ]
+

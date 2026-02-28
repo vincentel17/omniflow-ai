@@ -1248,6 +1248,8 @@ class OrgOptimizationSettingsPatchRequest(BaseModel):
 
 
 class PredictiveLeadScoreResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     id: uuid.UUID
     org_id: uuid.UUID
     lead_id: uuid.UUID
@@ -1260,7 +1262,20 @@ class PredictiveLeadScoreResponse(BaseModel):
     scored_at: datetime
 
 
+class PredictiveLeadScoreListItemResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: uuid.UUID
+    lead_id: uuid.UUID
+    model_version: str
+    score_probability: float
+    explanation: str
+    scored_at: datetime
+
+
 class PostingOptimizationResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     id: uuid.UUID
     org_id: uuid.UUID
     channel: str
@@ -1278,6 +1293,8 @@ class NurtureRecommendationResponse(BaseModel):
 
 
 class AdBudgetRecommendationResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     id: uuid.UUID
     org_id: uuid.UUID
     campaign_id: uuid.UUID
@@ -1316,3 +1333,6 @@ class ModelMetadataResponse(BaseModel):
 
 class ModelActivateRequest(BaseModel):
     version: str = Field(min_length=1, max_length=80)
+
+
+

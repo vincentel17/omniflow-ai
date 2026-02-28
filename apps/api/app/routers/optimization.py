@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from packages.optimization.engine import (
@@ -22,6 +22,9 @@ from packages.optimization.engine import (
 
 from ..db import get_db
 from ..models import (
+    Approval,
+    ApprovalEntityType,
+    ApprovalStatus,
     AdBudgetRecommendation,
     AdCampaign,
     AdSpendLedger,
@@ -46,12 +49,14 @@ from ..schemas import (
     OrgOptimizationSettingsPatchRequest,
     OrgOptimizationSettingsResponse,
     PostingOptimizationResponse,
+    PredictiveLeadScoreListItemResponse,
     PredictiveLeadScoreResponse,
     WorkflowOptimizationSuggestion,
 )
 from ..services.audit import write_audit_log
 from ..services.billing import ensure_org_active
 from ..services.events import write_event
+from ..services.org_settings import ads_budget_caps_for_org
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
 
 router = APIRouter(prefix="/optimization", tags=["optimization"])
@@ -71,6 +76,19 @@ def _get_optimization_settings(db: Session, org_id: uuid.UUID) -> OrgOptimizatio
         db.flush()
     return row
 
+
+
+def _require_optimization_enabled(
+    db: Session,
+    org_id: uuid.UUID,
+    setting_name: str,
+    *,
+    detail: str,
+) -> OrgOptimizationSettings:
+    row = _get_optimization_settings(db=db, org_id=org_id)
+    if not bool(getattr(row, setting_name)):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    return row
 
 def _serialize_settings(row: OrgOptimizationSettings) -> OrgOptimizationSettingsResponse:
     return OrgOptimizationSettingsResponse(
@@ -136,6 +154,22 @@ def _serialize_predictive_score(
     )
 
 
+def _serialize_predictive_score_list_item(row: PredictiveLeadScore) -> PredictiveLeadScoreListItemResponse:
+    top_feature = "no feature attribution available"
+    weights = _as_float_map(row.feature_importance_json)
+    if weights:
+        feature_name = max(weights.keys(), key=lambda key: abs(weights[key]))
+        top_feature = f"top feature: {feature_name}"
+    return PredictiveLeadScoreListItemResponse(
+        id=row.id,
+        lead_id=row.lead_id,
+        model_version=row.model_version,
+        score_probability=row.score_probability,
+        explanation=top_feature,
+        scored_at=row.scored_at,
+    )
+
+
 def _model_rows(db: Session, org_id: uuid.UUID, model_name: str | None = None) -> list[ModelMetadata]:
     stmt = org_scoped(
         select(ModelMetadata).where(ModelMetadata.deleted_at.is_(None)),
@@ -193,6 +227,28 @@ def patch_optimization_settings(
     return _serialize_settings(row)
 
 
+@router.get("/leads", response_model=list[PredictiveLeadScoreListItemResponse])
+def list_predictive_lead_scores(
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> list[PredictiveLeadScoreListItemResponse]:
+    require_role(context, Role.AGENT)
+    rows = db.scalars(
+        org_scoped(
+            select(PredictiveLeadScore)
+            .where(PredictiveLeadScore.deleted_at.is_(None))
+            .order_by(desc(PredictiveLeadScore.scored_at))
+            .limit(limit)
+            .offset(offset),
+            context.current_org_id,
+            PredictiveLeadScore,
+        )
+    ).all()
+    return [_serialize_predictive_score_list_item(row) for row in rows]
+
+
 @router.post("/lead-score/{lead_id}", response_model=PredictiveLeadScoreResponse)
 def score_predictive_lead(
     lead_id: uuid.UUID,
@@ -201,7 +257,12 @@ def score_predictive_lead(
 ) -> PredictiveLeadScoreResponse:
     require_role(context, Role.AGENT)
     ensure_org_active(db=db, org_id=context.current_org_id)
-
+    _require_optimization_enabled(
+        db=db,
+        org_id=context.current_org_id,
+        setting_name="enable_predictive_scoring",
+        detail="predictive scoring disabled for org",
+    )
     lead = db.scalar(
         org_scoped(
             select(Lead).where(Lead.id == lead_id, Lead.deleted_at.is_(None)),
@@ -305,6 +366,12 @@ def get_post_timing_optimizations(
     context: RequestContext = Depends(get_request_context),
 ) -> list[PostingOptimizationResponse]:
     require_role(context, Role.AGENT)
+    _require_optimization_enabled(
+        db=db,
+        org_id=context.current_org_id,
+        setting_name="enable_post_timing_optimization",
+        detail="post timing optimization disabled for org",
+    )
     samples: list[dict[str, object]] = []
     rows = db.scalars(
         org_scoped(
@@ -364,6 +431,12 @@ def get_nurture_recommendations(
     context: RequestContext = Depends(get_request_context),
 ) -> NurtureRecommendationResponse:
     require_role(context, Role.AGENT)
+    _require_optimization_enabled(
+        db=db,
+        org_id=context.current_org_id,
+        setting_name="enable_nurture_optimization",
+        detail="nurture optimization disabled for org",
+    )
     rows = db.scalars(
         org_scoped(
             select(Event)
@@ -395,6 +468,12 @@ def get_ad_budget_recommendations(
 ) -> list[AdBudgetRecommendationResponse]:
     require_role(context, Role.ADMIN)
     ensure_org_active(db=db, org_id=context.current_org_id)
+    _require_optimization_enabled(
+        db=db,
+        org_id=context.current_org_id,
+        setting_name="enable_ad_budget_recommendations",
+        detail="ad budget recommendations disabled for org",
+    )
 
     campaigns = db.scalars(
         org_scoped(
@@ -405,7 +484,65 @@ def get_ad_budget_recommendations(
             context.current_org_id,
             AdCampaign,
         )
-    ).all()
+    ).all()    caps = ads_budget_caps_for_org(db=db, org_id=context.current_org_id)
+    now = datetime.now(UTC)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).date()
+    today = now.date()
+
+    org_daily_spend = float(
+        db.scalar(
+            org_scoped(
+                select(func.coalesce(func.sum(AdSpendLedger.spend_usd), 0.0)).where(
+                    AdSpendLedger.day == today,
+                    AdSpendLedger.deleted_at.is_(None),
+                ),
+                context.current_org_id,
+                AdSpendLedger,
+            )
+        )
+        or 0.0
+    )
+    org_monthly_spend = float(
+        db.scalar(
+            org_scoped(
+                select(func.coalesce(func.sum(AdSpendLedger.spend_usd), 0.0)).where(
+                    AdSpendLedger.day >= month_start,
+                    AdSpendLedger.deleted_at.is_(None),
+                ),
+                context.current_org_id,
+                AdSpendLedger,
+            )
+        )
+        or 0.0
+    )
+
+    org_spend_total = float(
+        db.scalar(
+            org_scoped(
+                select(func.coalesce(func.sum(AdSpendLedger.spend_usd), 0.0)).where(
+                    AdSpendLedger.day >= month_start,
+                    AdSpendLedger.deleted_at.is_(None),
+                ),
+                context.current_org_id,
+                AdSpendLedger,
+            )
+        )
+        or 0.0
+    )
+    org_clicks_total = int(
+        db.scalar(
+            org_scoped(
+                select(func.coalesce(func.sum(AdSpendLedger.clicks), 0)).where(
+                    AdSpendLedger.day >= month_start,
+                    AdSpendLedger.deleted_at.is_(None),
+                ),
+                context.current_org_id,
+                AdSpendLedger,
+            )
+        )
+        or 0
+    )
+    org_benchmark_cpl = org_spend_total / max(1, org_clicks_total)
     responses: list[AdBudgetRecommendationResponse] = []
     for campaign in campaigns:
         metrics = db.scalars(
@@ -421,25 +558,75 @@ def get_ad_budget_recommendations(
                 AdSpendLedger,
             )
         ).all()
+
         spend_total = float(sum(row.spend_usd for row in metrics))
         clicks_total = int(sum(int(row.clicks or 0) for row in metrics))
         cpl = spend_total / max(1, clicks_total)
+
+        remaining_daily_cap = max(1.0, float(caps.get("org_daily_cap_usd", 10.0)) - org_daily_spend)
+        remaining_monthly_cap = max(1.0, float(caps.get("org_monthly_cap_usd", 200.0)) - org_monthly_spend)
+        campaign_cap = min(
+            float(caps.get("per_campaign_cap_usd", 50.0)),
+            remaining_daily_cap,
+            remaining_monthly_cap,
+        )
+
         recommendation = build_ad_budget_recommendation(
             current_daily_budget=float(campaign.daily_budget_usd),
             cpl=cpl,
-            benchmark_cpl=max(1.0, cpl * 0.9),
-            campaign_cap=max(float(campaign.daily_budget_usd), 500.0),
+            benchmark_cpl=max(0.5, org_benchmark_cpl if org_benchmark_cpl > 0 else cpl),
+            campaign_cap=max(1.0, campaign_cap),
         )
+        reasoning = dict(recommendation.reasoning_json)
+        reasoning["workflow_action_suggestion"] = "ADS_REQUEST_ACTIVATION"
+        reasoning["approval_required"] = "true"
+        reasoning["cap_used_usd"] = round(max(1.0, campaign_cap), 2)
+
         row = AdBudgetRecommendation(
             org_id=context.current_org_id,
             campaign_id=campaign.id,
             recommended_daily_budget=recommendation.recommended_daily_budget,
-            reasoning_json=recommendation.reasoning_json,
+            reasoning_json=reasoning,
             projected_cpl=recommendation.projected_cpl,
             model_version="ad_budget_allocator_v1",
         )
         db.add(row)
         db.flush()
+
+        approval_created = False
+        try:
+            with db.begin_nested():
+                db.add(
+                    Approval(
+                        org_id=context.current_org_id,
+                        entity_type=ApprovalEntityType.AD_SPEND_CHANGE,
+                        entity_id=campaign.id,
+                        status=ApprovalStatus.PENDING,
+                        requested_by=context.current_user_id,
+                        notes="Phase 14 ad budget recommendation requires approval before any spend change.",
+                    )
+                )
+                db.flush()
+            approval_created = True
+        except Exception:
+            # Backward compatibility for environments where enum migration lagged.
+            try:
+                with db.begin_nested():
+                    db.add(
+                        Approval(
+                            org_id=context.current_org_id,
+                            entity_type=ApprovalEntityType.AD_CAMPAIGN,
+                            entity_id=campaign.id,
+                            status=ApprovalStatus.PENDING,
+                            requested_by=context.current_user_id,
+                            notes="Phase 14 ad budget recommendation requires approval before any spend change.",
+                        )
+                    )
+                    db.flush()
+                approval_created = True
+            except Exception:
+                approval_created = False
+
         responses.append(
             AdBudgetRecommendationResponse(
                 id=row.id,
@@ -462,9 +649,28 @@ def get_ad_budget_recommendations(
             payload_json={
                 "campaign_id": str(campaign.id),
                 "recommended_daily_budget": recommendation.recommended_daily_budget,
+                "requires_approval": approval_created,
+                "workflow_action_suggestion": "ADS_REQUEST_ACTIVATION",
+                "cap_used_usd": round(max(1.0, campaign_cap), 2),
             },
             actor_id=str(context.current_user_id),
         )
+        write_audit_log(
+            db=db,
+            context=context,
+            action="optimization.ad_budget_recommendation_generated",
+            target_type="ad_campaign",
+            target_id=str(campaign.id),
+            metadata_json={
+                "recommended_daily_budget": recommendation.recommended_daily_budget,
+                "projected_cpl": recommendation.projected_cpl,
+                "model_version": row.model_version,
+                "requires_approval": approval_created,
+                "workflow_action_suggestion": "ADS_REQUEST_ACTIVATION",
+                "cap_used_usd": round(max(1.0, campaign_cap), 2),
+            },
+        )
+
     db.commit()
     return responses
 
@@ -503,6 +709,30 @@ def get_workflow_optimization_recommendations(
         )
     ).all()
     approval_pending = sum(1 for row in action_rows if row.status == "approval_pending")
+    total_event_count = int(
+        db.scalar(
+            org_scoped(
+                select(func.count(Event.id)).where(Event.deleted_at.is_(None)),
+                context.current_org_id,
+                Event,
+            )
+        )
+        or 0
+    )
+    sla_breach_count = int(
+        db.scalar(
+            org_scoped(
+                select(func.count(Event.id)).where(
+                    Event.type.in_(["SLA_BREACH", "SLA_ESCALATED"]),
+                    Event.deleted_at.is_(None),
+                ),
+                context.current_org_id,
+                Event,
+            )
+        )
+        or 0
+    )
+    sla_breach_rate = min(1.0, sla_breach_count / max(1, total_event_count))
 
     payload: list[dict[str, object]] = []
     for workflow_id, total in totals_by_workflow.items():
@@ -513,12 +743,20 @@ def get_workflow_optimization_recommendations(
                 "workflow_key": str(workflow_id),
                 "success_rate": success_rate,
                 "approval_latency_minutes": 180 if approval_pending else 30,
+                "sla_breach_rate": sla_breach_rate,
             }
         )
     suggestions = workflow_recommendations(workflow_stats=payload)
     return [WorkflowOptimizationSuggestion.model_validate(item) for item in suggestions]
 
 
+
+@router.get("/workflow/recommendations", response_model=list[WorkflowOptimizationSuggestion])
+def get_workflow_optimization_recommendations_alias(
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> list[WorkflowOptimizationSuggestion]:
+    return get_workflow_optimization_recommendations(db=db, context=context)
 @router.get("/next-best-action/{entity_type}/{entity_id}", response_model=NextBestActionResponse)
 def get_next_best_action(
     entity_type: str,
@@ -601,18 +839,51 @@ def list_models(
         baseline = _safe_float(row.metrics_json.get("auc"), 0.0)
         if baseline <= 0:
             baseline = _safe_float(row.metrics_json.get("uplift"), 0.8)
-        recent = baseline * 0.98
+        recent = _safe_float(row.metrics_json.get("recent_metric"), baseline * 0.98)
         drifted, reason = detect_model_drift(baseline_metric=baseline, recent_metric=recent)
         if drifted and row.status == ModelStatus.ACTIVE:
-            row.status = ModelStatus.DEGRADED
+            fallback = next(
+                (
+                    candidate
+                    for candidate in rows
+                    if candidate.name == row.name and candidate.id != row.id and candidate.status != ModelStatus.DEGRADED
+                ),
+                None,
+            )
+            if fallback is not None:
+                for candidate in rows:
+                    if candidate.name != row.name:
+                        continue
+                    candidate.status = ModelStatus.ACTIVE if candidate.id == fallback.id else ModelStatus.INACTIVE
+                row.status = ModelStatus.DEGRADED
+            else:
+                row.status = ModelStatus.DEGRADED
             write_event(
                 db=db,
                 org_id=context.current_org_id,
                 source="optimization",
                 channel="models",
                 event_type="MODEL_ROLLBACK",
-                payload_json={"name": row.name, "version": row.version, "reason": reason},
+                payload_json={
+                    "name": row.name,
+                    "version": row.version,
+                    "reason": reason,
+                    "rollback_to": fallback.version if fallback is not None else None,
+                },
                 actor_id=str(context.current_user_id),
+            )
+            write_audit_log(
+                db=db,
+                context=context,
+                action="optimization.model_rollback",
+                target_type="model_metadata",
+                target_id=str(row.id),
+                metadata_json={
+                    "name": row.name,
+                    "version": row.version,
+                    "reason": reason,
+                    "rollback_to": fallback.version if fallback is not None else None,
+                },
             )
         response.append(
             ModelMetadataResponse(
@@ -680,5 +951,41 @@ def activate_model_version(
         status=target.status.value,
         created_at=target.created_at,
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

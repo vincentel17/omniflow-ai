@@ -127,6 +127,15 @@ export type PredictiveLeadScore = {
   scored_at: string;
 };
 
+export type PredictiveLeadScoreListItem = {
+  id: string;
+  lead_id: string;
+  model_version: string;
+  score_probability: number;
+  explanation: string;
+  scored_at: string;
+};
+
 export type PostingOptimization = {
   id: string;
   org_id: string;
@@ -185,6 +194,10 @@ export async function listOptimizationModels(): Promise<OptimizationModel[]> {
   return apiFetch<OptimizationModel[]>("/optimization/models");
 }
 
+export async function listPredictiveLeadScores(limit = 25, offset = 0): Promise<PredictiveLeadScoreListItem[]> {
+  return apiFetch<PredictiveLeadScoreListItem[]>(`/optimization/leads?limit=${limit}&offset=${offset}`);
+}
+
 export async function listPostingOptimizations(channel = "meta"): Promise<PostingOptimization[]> {
   return apiFetch<PostingOptimization[]>(`/optimization/campaigns?channel=${encodeURIComponent(channel)}`);
 }
@@ -208,3 +221,4 @@ export async function getNextBestAction(entityType: string, id: string): Promise
 export async function scoreLeadPredictive(leadId: string): Promise<PredictiveLeadScore> {
   return apiFetch<PredictiveLeadScore>(`/optimization/lead-score/${encodeURIComponent(leadId)}`, { method: "POST" });
 }
+

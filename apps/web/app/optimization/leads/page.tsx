@@ -1,41 +1,41 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState } from "../../../components/ui/primitives";
-import { listOptimizationModels } from "../../../lib/api";
+import { listPredictiveLeadScores } from "../../../lib/api";
 
-async function getLeadModels() {
+async function getLeadScores() {
   try {
-    const rows = await listOptimizationModels();
-    return rows.filter((row) => row.name.startsWith("lead_score_model"));
+    return await listPredictiveLeadScores();
   } catch {
     return [];
   }
 }
 
 export default async function OptimizationLeadsPage() {
-  const models = await getLeadModels();
+  const rows = await getLeadScores();
 
   return (
     <main className="page-shell space-y-6">
       <section className="surface-card p-6">
         <h1 className="page-title">Predictive Lead Scoring</h1>
-        <p className="page-subtitle">Model versions, activation status, and explainability-first scoring metadata.</p>
+        <p className="page-subtitle">Stored predictive scores with confidence and feature-attribution explanation.</p>
       </section>
 
-      {models.length === 0 ? (
-        <EmptyState title="No lead scoring models" description="Model metadata appears after optimization model listing is initialized." />
+      {rows.length === 0 ? (
+        <EmptyState title="No predictive lead scores" description="Run lead scoring from API or workflow hooks to populate this view." />
       ) : (
         <Card>
-          <CardHeader><CardTitle>Lead Score Models</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Lead Predictions</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <DataTable>
-                <thead><tr><th>Name</th><th>Version</th><th>Status</th><th>Trained</th></tr></thead>
+                <thead><tr><th>Lead</th><th>Model</th><th>Probability</th><th>Explanation</th><th>Scored</th></tr></thead>
                 <tbody>
-                  {models.map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.id}>
-                      <td>{row.name}</td>
-                      <td>{row.version}</td>
-                      <td><Badge tone={row.status === "active" ? "success" : row.status === "degraded" ? "warn" : "neutral"}>{row.status}</Badge></td>
-                      <td>{new Date(row.trained_at).toLocaleString()}</td>
+                      <td className="font-mono text-xs">{row.lead_id.slice(0, 8)}</td>
+                      <td>{row.model_version}</td>
+                      <td><Badge tone="info">{Math.round(row.score_probability * 100)}%</Badge></td>
+                      <td>{row.explanation}</td>
+                      <td>{new Date(row.scored_at).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
