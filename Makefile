@@ -27,6 +27,9 @@ migrate:
 seed:
 	pnpm run seed
 
+qa-standard:
+	pnpm run qa:standard
+
 release-check:
 	pnpm run release-check
 
