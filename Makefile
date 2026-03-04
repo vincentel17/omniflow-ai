@@ -27,6 +27,15 @@ migrate:
 seed:
 	pnpm run seed
 
+seed-demo:
+	pnpm run seed:demo
+
+reset-demo:
+	pnpm run reset:demo
+
+simulator-demo-tick:
+	pnpm run demo:simulator:tick
+
 qa-standard:
 	pnpm run qa:standard
 

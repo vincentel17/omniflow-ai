@@ -320,6 +320,23 @@ class ConnectorProviderResponse(BaseModel):
     configured: bool
 
 
+class ConnectorEnvCheckItem(BaseModel):
+    key: str
+    required_for_live: bool
+    present: bool
+
+
+class ConnectorDiagnosticsSummaryResponse(BaseModel):
+    connector_mode: str
+    ai_mode: str
+    ads_mode: str
+    live_ready: bool
+    env_checks: list[ConnectorEnvCheckItem]
+    accounts_linked: int
+    last_sync_at: datetime | None
+    last_error: str | None
+
+
 class ConnectorStartRequest(BaseModel):
     account_ref: str = Field(min_length=1, max_length=255)
     display_name: str = Field(min_length=1, max_length=255)

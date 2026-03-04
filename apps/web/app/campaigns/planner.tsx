@@ -78,11 +78,11 @@ export function CampaignPlanner({ campaigns }: Props) {
             value={weekStart}
           />
         </div>
-        <button className="rounded bg-slate-200 px-4 py-2 text-slate-900" type="submit">
+        <button className="rounded bg-slate-200 px-4 py-2 text-slate-900" data-testid="campaign-generate-plan" type="submit">
           Generate Plan
         </button>
       </form>
-      {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+      {status ? <p className="text-sm text-slate-300" data-testid="campaign-status-message">{status}</p> : null}
       <ul className="space-y-3">
         {campaigns.map((campaign) => (
           <li className="rounded border border-slate-800 p-3" key={campaign.id}>
@@ -93,12 +93,13 @@ export function CampaignPlanner({ campaigns }: Props) {
             <div className="mt-3 flex gap-2">
               <button
                 className="rounded bg-slate-700 px-3 py-1 text-sm"
+                data-testid={`campaign-generate-content-${campaign.id}`}
                 onClick={() => generateContent(campaign.id)}
                 type="button"
               >
                 Generate Content
               </button>
-              <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" onClick={() => approve(campaign.id)} type="button">
+              <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid={`campaign-approve-${campaign.id}`} onClick={() => approve(campaign.id)} type="button">
                 Approve
               </button>
             </div>

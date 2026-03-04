@@ -107,6 +107,20 @@ def _as_int(value: object, default: int) -> int:
     return default
 
 
+def _demo_simulator_enabled() -> bool:
+    return os.getenv("DEMO_SIMULATOR", "").lower() in {"1", "true", "yes"}
+
+
+def _demo_sim_seed() -> str:
+    return os.getenv("DEMO_SIM_SEED", "1234")
+
+
+def _demo_roll(org_id: uuid.UUID, key: str, modulo: int) -> int:
+    raw = f"{_demo_sim_seed()}:{org_id}:{key}".encode("utf-8")
+    digest = hashlib.sha256(raw).hexdigest()
+    return int(digest[:8], 16) % max(1, modulo)
+
+
 _PROVIDER_PREFIX = {
     "google-business-profile": "gbp",
     "meta": "meta",
@@ -601,7 +615,198 @@ def scheduler_tick() -> int:
                 continue
             publish_job_execute.delay(str(row.id))
             enqueued += 1
+        if _demo_simulator_enabled():
+            _run_demo_simulator(db)
+            db.commit()
     return enqueued
+
+
+def _run_demo_simulator(db: Session) -> int:
+    processed = 0
+    now = _now()
+    slot_key = now.strftime("%Y%m%d%H%M")
+    month_start = now.date().replace(day=1)
+    month_end = (month_start + timedelta(days=31)).replace(day=1) - timedelta(days=1)
+
+    org_ids = db.scalars(
+        select(Org.id).where(
+            Org.deleted_at.is_(None),
+            Org.org_status == OrgStatus.ACTIVE,
+        )
+    ).all()
+
+    for org_id in org_ids:
+        running = db.scalar(
+            select(PublishJob).where(
+                PublishJob.org_id == org_id,
+                PublishJob.deleted_at.is_(None),
+                PublishJob.status == PublishJobStatus.RUNNING,
+            )
+        )
+        if running is not None:
+            running.status = PublishJobStatus.SUCCEEDED
+            running.published_at = now
+            running.last_error = None
+            content = db.scalar(
+                select(ContentItem).where(
+                    ContentItem.id == running.content_item_id,
+                    ContentItem.org_id == org_id,
+                    ContentItem.deleted_at.is_(None),
+                )
+            )
+            if content is not None:
+                content.status = ContentItemStatus.PUBLISHED
+                _write_system_event(
+                    db=db,
+                    org_id=org_id,
+                    channel=content.channel,
+                    event_type="PUBLISH_SUCCESS",
+                    content_id=content.id,
+                    payload={"publish_job_id": str(running.id), "simulated": True},
+                )
+            processed += 1
+        else:
+            queued = db.scalar(
+                select(PublishJob).where(
+                    PublishJob.org_id == org_id,
+                    PublishJob.deleted_at.is_(None),
+                    PublishJob.status == PublishJobStatus.QUEUED,
+                    (PublishJob.schedule_at.is_(None) | (PublishJob.schedule_at <= now)),
+                )
+            )
+            if queued is not None:
+                queued.status = PublishJobStatus.RUNNING
+                content = db.scalar(
+                    select(ContentItem).where(
+                        ContentItem.id == queued.content_item_id,
+                        ContentItem.org_id == org_id,
+                        ContentItem.deleted_at.is_(None),
+                    )
+                )
+                if content is not None:
+                    _write_system_event(
+                        db=db,
+                        org_id=org_id,
+                        channel=content.channel,
+                        event_type="PUBLISH_PROGRESS",
+                        content_id=content.id,
+                        payload={"publish_job_id": str(queued.id), "state": "publishing", "simulated": True},
+                    )
+                processed += 1
+
+        thread = db.scalar(
+            select(InboxThread)
+            .where(
+                InboxThread.org_id == org_id,
+                InboxThread.deleted_at.is_(None),
+                InboxThread.status.in_([InboxThreadStatus.OPEN, InboxThreadStatus.PENDING]),
+            )
+            .order_by(InboxThread.created_at.asc())
+            .limit(1)
+        )
+        if thread is not None and _demo_roll(org_id, f"inbox:{slot_key}", 3) == 0:
+            external_message_id = f"demo-sim-{slot_key}-{thread.id}"
+            exists = db.scalar(
+                select(InboxMessage.id).where(
+                    InboxMessage.org_id == org_id,
+                    InboxMessage.thread_id == thread.id,
+                    InboxMessage.external_message_id == external_message_id,
+                    InboxMessage.deleted_at.is_(None),
+                )
+            )
+            if exists is None:
+                message = InboxMessage(
+                    org_id=org_id,
+                    thread_id=thread.id,
+                    external_message_id=external_message_id,
+                    direction=InboxMessageDirection.INBOUND,
+                    sender_ref="demo-prospect",
+                    sender_display="Demo Prospect",
+                    body_text=f"Demo inbound message at {slot_key}",
+                    body_raw_json={"simulated": True},
+                    flags_json={},
+                    pii_flags_json={},
+                    sensitive_level="low",
+                )
+                db.add(message)
+                thread.last_message_at = now
+                write_event(
+                    db=db,
+                    org_id=org_id,
+                    source="simulator",
+                    channel="inbox",
+                    event_type="INBOX_INGESTED",
+                    payload_json={"thread_id": str(thread.id), "message_id": external_message_id},
+                )
+                processed += 1
+
+        if _demo_roll(org_id, f"lead:{slot_key}", 4) == 1:
+            lead_email = f"demo+{org_id.hex[:8]}-{slot_key}@example.test"
+            existing_lead = db.scalar(
+                select(Lead.id).where(
+                    Lead.org_id == org_id,
+                    Lead.email == lead_email,
+                    Lead.deleted_at.is_(None),
+                )
+            )
+            if existing_lead is None:
+                lead = Lead(
+                    org_id=org_id,
+                    source="demo_simulator",
+                    status=LeadStatus.NEW,
+                    name=f"Demo Lead {slot_key}",
+                    email=lead_email,
+                    phone=None,
+                    location_json={"city": "Demo City", "state": "NY"},
+                    tags_json=["demo-simulator"],
+                    pii_flags_json={},
+                    sensitive_level="low",
+                )
+                db.add(lead)
+                db.flush()
+                write_event(
+                    db=db,
+                    org_id=org_id,
+                    source="simulator",
+                    channel="leads",
+                    event_type="LEAD_CREATED",
+                    payload_json={"lead_id": str(lead.id), "source": "demo_simulator"},
+                )
+                processed += 1
+
+        for metric_type in (UsageMetricType.POST_CREATED, UsageMetricType.AI_GENERATION):
+            metric = db.scalar(
+                select(UsageMetric).where(
+                    UsageMetric.org_id == org_id,
+                    UsageMetric.metric_type == metric_type,
+                    UsageMetric.period_start == month_start,
+                    UsageMetric.period_end == month_end,
+                    UsageMetric.deleted_at.is_(None),
+                )
+            )
+            if metric is None:
+                metric = UsageMetric(
+                    org_id=org_id,
+                    metric_type=metric_type,
+                    period_start=month_start,
+                    period_end=month_end,
+                    count=0,
+                )
+                db.add(metric)
+            metric.count = int(metric.count or 0) + 1
+            processed += 1
+
+    return processed
+
+
+@app.task(name="worker.demo.simulator_tick")
+def demo_simulator_tick() -> int:
+    if not _demo_simulator_enabled():
+        return 0
+    with SessionLocal() as db:
+        processed = _run_demo_simulator(db)
+        db.commit()
+        return processed
 
 
 @app.task(name="worker.inbox.ingest_poll")

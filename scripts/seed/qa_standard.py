@@ -185,6 +185,7 @@ def _seed_org_basics(db: Session, spec: OrgSpec) -> tuple[uuid.UUID, uuid.UUID, 
         "agent_cooldown_minutes": 0,
         "agent_schedule_enabled": True,
         "agent_schedule_hour_local": 8,
+        "enable_auto_nurture_apply": True,
         "agent_allowed_action_types_json": [],
         "agent_disallowed_targets_json": [],
     }

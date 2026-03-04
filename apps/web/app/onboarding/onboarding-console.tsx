@@ -100,7 +100,7 @@ export function OnboardingConsole() {
         <div className="mt-2 h-2 w-full rounded bg-slate-700">
           <div className="h-2 rounded bg-emerald-400" style={{ width: `${percent}%` }} />
         </div>
-        <button className="mt-4 rounded bg-slate-200 px-3 py-2 text-slate-900" disabled={loading} onClick={startSession} type="button">
+        <button className="mt-4 rounded bg-slate-200 px-3 py-2 text-slate-900" data-testid="onboarding-start" disabled={loading} onClick={startSession} type="button">
           {session ? "Restart/Resume Session" : "Start Onboarding"}
         </button>
       </div>
@@ -116,6 +116,7 @@ export function OnboardingConsole() {
               ) : (
                 <button
                   className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200"
+                  data-testid={`onboarding-step-${step.id}`}
                   disabled={loading || !session}
                   onClick={() => completeStep(step.id)}
                   type="button"
@@ -128,7 +129,7 @@ export function OnboardingConsole() {
         </ul>
       </div>
 
-      {message ? <p className="text-sm text-amber-300">{message}</p> : null}
+      {message ? <p className="text-sm text-amber-300" data-testid="onboarding-message">{message}</p> : null}
     </div>
   );
 }

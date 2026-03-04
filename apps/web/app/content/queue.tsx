@@ -59,7 +59,7 @@ export function ContentQueue({ items }: Props) {
 
   return (
     <div className="mt-6 space-y-4">
-      {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+      {status ? <p className="text-sm text-slate-300" data-testid="content-status-message">{status}</p> : null}
       <ul className="space-y-3">
         {items.map((item) => (
           <li className="rounded border border-slate-800 p-3" key={item.id}>
@@ -70,10 +70,10 @@ export function ContentQueue({ items }: Props) {
               <p className="text-sm text-amber-300">Warnings: {item.policy_warnings_json.join(", ")}</p>
             ) : null}
             <div className="mt-3 flex gap-2">
-              <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" onClick={() => approve(item.id)} type="button">
+              <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid={`content-approve-${item.id}`} onClick={() => approve(item.id)} type="button">
                 Approve
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={() => schedule(item.id)} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid={`content-schedule-${item.id}`} onClick={() => schedule(item.id)} type="button">
                 Schedule
               </button>
             </div>

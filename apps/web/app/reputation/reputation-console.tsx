@@ -125,12 +125,13 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         <div className="flex gap-2">
           <button
             className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900"
+            data-testid="reputation-import-mock-review"
             onClick={importMockReview}
             type="button"
           >
             Import Mock Review
           </button>
-          <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={createCampaign} type="button">
+          <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="reputation-create-start-campaign" onClick={createCampaign} type="button">
             Create + Start Campaign
           </button>
         </div>
@@ -148,6 +149,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
               <p className="text-xs text-slate-500">Urgency: {review.sentiment_json.urgency ?? "n/a"}</p>
               <button
                 className="mt-2 rounded bg-slate-700 px-3 py-1 text-sm"
+                data-testid={`reputation-draft-response-${review.id}`}
                 onClick={() => draftResponse(review.id)}
                 type="button"
               >
@@ -172,7 +174,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
           ))}
         </ul>
       </section>
-      {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+      {status ? <p className="text-sm text-slate-300" data-testid="reputation-status-message">{status}</p> : null}
     </div>
   );
 }

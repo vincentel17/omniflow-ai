@@ -17,6 +17,17 @@ type OpsSettings = {
   providers_enabled_json: Record<string, boolean>;
 };
 
+type DiagnosticsSummary = {
+  connector_mode: string;
+  ai_mode: string;
+  ads_mode: string;
+  live_ready: boolean;
+  env_checks: Array<{ key: string; required_for_live: boolean; present: boolean }>;
+  accounts_linked: number;
+  last_sync_at: string | null;
+  last_error: string | null;
+};
+
 async function getAccounts(): Promise<ConnectorAccount[]> {
   try {
     return await apiFetch<ConnectorAccount[]>("/connectors/accounts");
@@ -33,8 +44,16 @@ async function getOpsSettings(): Promise<OpsSettings> {
   }
 }
 
+async function getDiagnosticsSummary(): Promise<DiagnosticsSummary | null> {
+  try {
+    return await apiFetch<DiagnosticsSummary>("/connectors/diagnostics/summary");
+  } catch {
+    return null;
+  }
+}
+
 export default async function IntegrationsPage() {
-  const [accounts, opsSettings] = await Promise.all([getAccounts(), getOpsSettings()]);
+  const [accounts, opsSettings, diagnostics] = await Promise.all([getAccounts(), getOpsSettings(), getDiagnosticsSummary()]);
 
   return (
     <main className="page-shell">
@@ -42,6 +61,33 @@ export default async function IntegrationsPage() {
       <p className="mt-2 text-slate-300">Manage connector mode, provider live flags, and account diagnostics.</p>
 
       <IntegrationsClient initialSettings={opsSettings} />
+
+      <section className="mt-8 rounded border border-slate-800 p-4">
+        <h2 className="text-xl font-semibold">Connector Diagnostics</h2>
+        {!diagnostics ? (
+          <p className="mt-2 text-slate-400">Diagnostics unavailable.</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-slate-300">
+              Mode: {diagnostics.connector_mode} | AI: {diagnostics.ai_mode} | ADS: {diagnostics.ads_mode}
+            </p>
+            <p className="text-sm text-slate-300">
+              Accounts linked: {diagnostics.accounts_linked} | Live ready: {diagnostics.live_ready ? "yes" : "no"}
+            </p>
+            <p className="text-sm text-slate-400">
+              Last sync: {diagnostics.last_sync_at ?? "n/a"} | Last error: {diagnostics.last_error ?? "n/a"}
+            </p>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              {diagnostics.env_checks.map((item) => (
+                <li className="rounded border border-slate-700 px-3 py-2 text-sm" key={item.key}>
+                  <span className="font-medium">{item.key}</span>: {item.present ? "present" : "missing"}
+                  {item.required_for_live ? " (required)" : " (optional)"}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
 
       <section className="mt-8">
         <h2 className="text-xl font-semibold">Connected Accounts</h2>

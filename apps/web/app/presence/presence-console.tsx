@@ -99,7 +99,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
   return (
     <div className="mt-6 grid gap-6">
       <section className="rounded border border-slate-800 p-4">
-        <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" onClick={runAudit} type="button">
+        <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="presence-run-audit" onClick={runAudit} type="button">
           Run Presence Audit
         </button>
         {latest ? (
@@ -147,7 +147,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
           ))}
         </ul>
       </section>
-      {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+      {status ? <p className="text-sm text-slate-300" data-testid="presence-status-message">{status}</p> : null}
     </div>
   );
 }

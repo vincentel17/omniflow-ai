@@ -40,7 +40,7 @@ export function PublishJobsTable({ jobs }: Props) {
 
   return (
     <div className="mt-6 space-y-4">
-      {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+      {status ? <p className="text-sm text-slate-300" data-testid="publish-status-message">{status}</p> : null}
       <ul className="space-y-3">
         {jobs.map((job) => (
           <li className="rounded border border-slate-800 p-3" key={job.id}>
@@ -51,7 +51,7 @@ export function PublishJobsTable({ jobs }: Props) {
               attempts={job.attempts} external_id={job.external_id ?? "n/a"}
             </p>
             {job.last_error ? <p className="text-sm text-rose-300">{job.last_error}</p> : null}
-            <button className="mt-3 rounded bg-slate-700 px-3 py-1 text-sm" onClick={() => cancel(job.id)} type="button">
+            <button className="mt-3 rounded bg-slate-700 px-3 py-1 text-sm" data-testid={`publish-cancel-${job.id}`} onClick={() => cancel(job.id)} type="button">
               Cancel
             </button>
           </li>

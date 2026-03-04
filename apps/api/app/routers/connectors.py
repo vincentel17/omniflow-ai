@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -15,6 +15,8 @@ from ..schemas import (
     ConnectorAccountResponse,
     ConnectorCallbackRequest,
     ConnectorDiagnosticsResponse,
+    ConnectorDiagnosticsSummaryResponse,
+    ConnectorEnvCheckItem,
     ConnectorHealthResponse,
     ConnectorProviderResponse,
     ConnectorStartRequest,
@@ -63,6 +65,10 @@ def _provider_is_configured(provider: str) -> bool:
 def _ensure_provider(provider: str) -> None:
     if provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+
+def _env_present(value: str | None) -> bool:
+    return bool(value and value.strip())
 
 
 def _serialize_account(row: ConnectorAccount) -> ConnectorAccountResponse:
@@ -152,6 +158,98 @@ def list_providers(
         )
         for provider in SUPPORTED_PROVIDERS
     ]
+
+
+@router.get("/diagnostics/summary", response_model=ConnectorDiagnosticsSummaryResponse)
+def connector_diagnostics_summary(
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ConnectorDiagnosticsSummaryResponse:
+    require_role(context, Role.MEMBER)
+
+    env_checks = [
+        ConnectorEnvCheckItem(
+            key="META_APP_ID",
+            required_for_live=True,
+            present=_env_present(settings.meta_app_id),
+        ),
+        ConnectorEnvCheckItem(
+            key="META_APP_SECRET",
+            required_for_live=True,
+            present=_env_present(settings.meta_app_secret),
+        ),
+        ConnectorEnvCheckItem(
+            key="LINKEDIN_CLIENT_ID",
+            required_for_live=True,
+            present=_env_present(settings.linkedin_client_id),
+        ),
+        ConnectorEnvCheckItem(
+            key="LINKEDIN_CLIENT_SECRET",
+            required_for_live=True,
+            present=_env_present(settings.linkedin_client_secret),
+        ),
+        ConnectorEnvCheckItem(
+            key="GOOGLE_CLIENT_ID",
+            required_for_live=True,
+            present=_env_present(settings.google_client_id),
+        ),
+        ConnectorEnvCheckItem(
+            key="GOOGLE_CLIENT_SECRET",
+            required_for_live=True,
+            present=_env_present(settings.google_client_secret),
+        ),
+        ConnectorEnvCheckItem(
+            key="OAUTH_REDIRECT_URI",
+            required_for_live=True,
+            present=_env_present(settings.oauth_redirect_uri),
+        ),
+        ConnectorEnvCheckItem(
+            key="TOKEN_ENCRYPTION_KEY",
+            required_for_live=True,
+            present=_env_present(settings.token_encryption_key),
+        ),
+        ConnectorEnvCheckItem(
+            key="OPENAI_API_KEY",
+            required_for_live=False,
+            present=_env_present(settings.openai_api_key),
+        ),
+    ]
+
+    linked_accounts = int(
+        db.scalar(
+            select(func.count(ConnectorAccount.id)).where(
+                ConnectorAccount.org_id == context.current_org_id,
+                ConnectorAccount.deleted_at.is_(None),
+            )
+        )
+        or 0
+    )
+
+    latest_health = db.scalar(
+        select(ConnectorHealth)
+        .where(
+            ConnectorHealth.org_id == context.current_org_id,
+            ConnectorHealth.deleted_at.is_(None),
+        )
+        .order_by(desc(ConnectorHealth.last_ok_at), desc(ConnectorHealth.updated_at))
+        .limit(1)
+    )
+
+    mode = connector_mode_for_org(db, context.current_org_id)
+    live_ready = all(check.present for check in env_checks if check.required_for_live)
+    if mode != "live":
+        live_ready = False
+
+    return ConnectorDiagnosticsSummaryResponse(
+        connector_mode=mode,
+        ai_mode=settings.ai_mode,
+        ads_mode="mock",
+        live_ready=live_ready,
+        env_checks=env_checks,
+        accounts_linked=linked_accounts,
+        last_sync_at=latest_health.last_ok_at if latest_health is not None else None,
+        last_error=latest_health.last_error_msg[:200] if latest_health and latest_health.last_error_msg else None,
+    )
 
 
 @router.post("/{provider}/start", response_model=ConnectorStartResponse)

@@ -117,3 +117,28 @@ See `docs/connectors.md` for architecture and extension guidance.
 - If preflight fails on env vars, ensure `.env` includes all keys in `.env.schema.json`.
 - If docker health fails, run `docker compose ps` and inspect failing service logs.
 - If Playwright fails in CI, run `pnpm --filter @omniflow/web test:e2e -- --trace=on`.
+
+## E2E Verified Flows
+
+- Onboarding (`/onboarding`): start session + complete steps
+- Campaign/Content/Publish (`/campaigns`, `/content`, `/publish/jobs`): plan -> generate -> approve -> schedule -> publish status transitions
+- Inbox/Leads (`/inbox`, `/leads`): ingest -> suggest/draft reply -> create lead -> score/route/nurture
+- Presence/SEO/Reputation (`/presence`, `/seo`, `/reputation`): audits, work-item lifecycle, review-response draft
+- Governance/Admin (`/audit`, `/events`, `/billing`, `/automations/agents`): action traceability and controls
+- Connector diagnostics (`/settings/integrations`): mode, env checklist, account health summary
+
+### Local Demo Runbook
+
+1. `docker compose up -d --build`
+2. `pnpm run migrate`
+3. `ALLOW_QA_SEED=true pnpm run seed:demo`
+4. Optional clean reset: `ALLOW_QA_RESET=true ALLOW_QA_SEED=true pnpm run reset:demo`
+5. Optional deterministic simulator tick: `DEMO_SIMULATOR=true DEMO_SIM_SEED=1234 pnpm run demo:simulator:tick`
+6. E2E run: `pnpm --filter @omniflow/web test:e2e`
+
+### Live Connector Enablement (Safe Minimum)
+
+1. Keep defaults in mock unless checklist is green.
+2. In `/settings/integrations`, review Connector Diagnostics env checklist.
+3. Required live env vars: `META_APP_ID`, `META_APP_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URI`, `TOKEN_ENCRYPTION_KEY`.
+4. Switch connector mode to `live` only after env requirements are present and use sandbox/test accounts.

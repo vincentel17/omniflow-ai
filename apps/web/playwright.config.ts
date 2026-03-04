@@ -11,7 +11,10 @@ export default defineConfig({
   testDir: "./tests/e2e",
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
-    navigationTimeout: 120_000
+    navigationTimeout: 120_000,
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
+    trace: "retain-on-failure"
   },
   webServer: {
     timeout: 240_000,

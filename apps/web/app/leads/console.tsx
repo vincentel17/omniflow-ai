@@ -159,7 +159,7 @@ export function LeadsConsole({ initialLeads }: Props) {
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <section className="rounded border border-slate-800 p-4">
-        <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={refreshLeads} type="button">
+        <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="leads-refresh" onClick={refreshLeads} type="button">
           Refresh
         </button>
         <ul className="mt-4 space-y-2">
@@ -188,13 +188,13 @@ export function LeadsConsole({ initialLeads }: Props) {
         {selectedLead ? (
           <>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={scoreLead} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-score-btn" onClick={scoreLead} type="button">
                 Score
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={routeLead} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-route-btn" onClick={routeLead} type="button">
                 Route
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={applyNurture} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-apply-nurture-btn" onClick={applyNurture} type="button">
                 Apply Nurture
               </button>
             </div>
@@ -244,7 +244,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         ) : (
           <p className="mt-3 text-slate-400">Select a lead.</p>
         )}
-        {status ? <p className="mt-3 text-sm text-slate-300">{status}</p> : null}
+        {status ? <p className="mt-3 text-sm text-slate-300" data-testid="lead-status-message">{status}</p> : null}
       </section>
     </div>
   );

@@ -110,6 +110,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
       <section className="rounded border border-slate-800 p-4">
         <button
           className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900"
+          data-testid="seo-generate-plan"
           onClick={generatePlan}
           type="button"
         >
@@ -128,12 +129,13 @@ export function SEOConsole({ initialWorkItems }: Props) {
               <div className="mt-2 flex gap-2">
                 <button
                   className="rounded bg-slate-700 px-3 py-1 text-sm"
+                  data-testid={`seo-generate-${item.id}`}
                   onClick={() => generateContent(item.id)}
                   type="button"
                 >
                   Generate
                 </button>
-                <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={() => approve(item.id)} type="button">
+                <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid={`seo-approve-${item.id}`} onClick={() => approve(item.id)} type="button">
                   Approve
                 </button>
                 <a
@@ -149,7 +151,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
           ))}
         </ul>
       </section>
-      {status ? <p className="text-sm text-slate-300">{status}</p> : null}
+      {status ? <p className="text-sm text-slate-300" data-testid="seo-status-message">{status}</p> : null}
     </div>
   );
 }

@@ -160,7 +160,7 @@ export function InboxConsole({ initialThreads }: Props) {
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <section className="rounded border border-slate-800 p-4">
         <div className="flex gap-2">
-          <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" onClick={ingestMock} type="button">
+          <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="inbox-ingest-mock" onClick={ingestMock} type="button">
             Ingest Mock
           </button>
           <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={refreshThreads} type="button">
@@ -187,10 +187,10 @@ export function InboxConsole({ initialThreads }: Props) {
         {selectedThread ? (
           <>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={suggestReply} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-suggest-reply" onClick={suggestReply} type="button">
                 Suggest Reply
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={createLead} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-create-lead" onClick={createLead} type="button">
                 Create Lead
               </button>
               <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={closeThread} type="button">
@@ -203,7 +203,7 @@ export function InboxConsole({ initialThreads }: Props) {
               placeholder="Draft reply text..."
               value={draftText}
             />
-            <button className="mt-2 rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" onClick={draftReply} type="button">
+            <button className="mt-2 rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="inbox-save-draft" onClick={draftReply} type="button">
               Save Draft
             </button>
             <ul className="mt-4 space-y-2">
@@ -220,7 +220,7 @@ export function InboxConsole({ initialThreads }: Props) {
         ) : (
           <p className="mt-3 text-slate-400">Select a thread to view details.</p>
         )}
-        {status ? <p className="mt-3 text-sm text-slate-300">{status}</p> : null}
+        {status ? <p className="mt-3 text-sm text-slate-300" data-testid="inbox-status-message">{status}</p> : null}
       </section>
     </div>
   );
