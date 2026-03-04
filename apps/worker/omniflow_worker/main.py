@@ -1,5 +1,6 @@
 import os
 import uuid
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 from celery import Celery
@@ -86,6 +87,11 @@ def _org_is_active(db: Session, org_id: uuid.UUID) -> bool:
     if row is None:
         return False
     return row.org_status == OrgStatus.ACTIVE
+def _should_run_agent_schedule(*, schedule_enabled: bool, now_hour: int, scheduled_hour: int) -> bool:
+    if not schedule_enabled:
+        return False
+    return now_hour == max(0, min(23, scheduled_hour))
+
 def _as_int(value: object, default: int) -> int:
     if isinstance(value, bool):
         return int(value)
@@ -1352,6 +1358,8 @@ def workflow_action_execute(self: Celery, action_run_id: str) -> str:
 
         action_input = action_run.input_json if isinstance(action_run.input_json, dict) else {}
         depth = max(1, _as_int(action_input.get("depth", 1), 1))
+        agent_run_id = action_input.get("agent_run_id")
+        step_id = action_input.get("step_id")
 
         action_run.status = WorkflowActionRunStatus.RUNNING
         db.flush()
@@ -1368,6 +1376,19 @@ def workflow_action_execute(self: Celery, action_run_id: str) -> str:
                 content_id=run.id,
                 payload=_workflow_event_payload({"workflow_run_id": str(run.id), "action_run_id": str(action_run.id)}, run.id, depth),
             )
+            if agent_run_id and step_id:
+                _write_system_event(
+                    db=db,
+                    org_id=action_run.org_id,
+                    channel="automations",
+                    event_type="AGENT_STEP_EXECUTION_SUCCEEDED",
+                    content_id=run.id,
+                    payload={
+                        "agent_run_id": str(agent_run_id),
+                        "step_id": str(step_id),
+                        "action_run_id": str(action_run.id),
+                    },
+                )
             _write_system_audit(
                 db=db,
                 org_id=action_run.org_id,
@@ -1404,11 +1425,24 @@ def workflow_action_execute(self: Celery, action_run_id: str) -> str:
                     content_id=run.id,
                     payload={"workflow_run_id": str(run.id), "action_run_id": str(action_run.id), "error": error_message[:200]},
                 )
+                if agent_run_id and step_id:
+                    _write_system_event(
+                        db=db,
+                        org_id=action_run.org_id,
+                        channel="automations",
+                        event_type="AGENT_STEP_EXECUTION_FAILED",
+                        content_id=run.id,
+                        payload={
+                            "agent_run_id": str(agent_run_id),
+                            "step_id": str(step_id),
+                            "action_run_id": str(action_run.id),
+                            "error": error_message[:200],
+                        },
+                    )
                 db.commit()
                 return "failed"
             db.commit()
             raise self.retry(exc=exc)
-
 
 @app.task(name="worker.workflow.approval.apply")
 def workflow_approval_apply(approval_id: str) -> str:
@@ -1452,6 +1486,354 @@ def workflow_approval_apply(approval_id: str) -> str:
 
 
 
+
+
+def _agent_step_idempotency_key(org_id: uuid.UUID, agent_run_id: uuid.UUID, step_id: str, target_ref: str) -> str:
+    raw = f"{org_id}:{agent_run_id}:{step_id}:{target_ref}".encode("utf-8")
+    digest = hashlib.sha256(raw).hexdigest()
+    return f"agent-step-{digest}"
+
+
+@app.task(name="worker.agents.run_create")
+def agent_run_create(event_id: str | None = None, trigger: str = "event", org_id: str | None = None) -> str:
+    from app.models import AgentRunStatus, Approval, ApprovalEntityType, ApprovalStatus
+    from app.services.agents import (
+        approval_block_reason,
+        assert_agent_controls,
+        build_context_snapshot,
+        create_agent_run_row,
+        enforce_plan_safety,
+        enforce_rate_limits,
+        plans_for_org,
+        requires_approval,
+    )
+    from app.services.org_settings import get_org_settings_payload
+
+    with SessionLocal() as db:
+        resolved_org_id: uuid.UUID | None = uuid.UUID(org_id) if org_id else None
+        trigger_event_uuid: uuid.UUID | None = None
+        if event_id:
+            trigger_event_uuid = uuid.UUID(event_id)
+            source_event = db.scalar(select(Event).where(Event.id == trigger_event_uuid, Event.deleted_at.is_(None)))
+            if source_event is None:
+                return "missing_event"
+            resolved_org_id = source_event.org_id
+        if resolved_org_id is None:
+            return "missing_org"
+        if not _org_is_active(db=db, org_id=resolved_org_id):
+            return "org_not_active"
+
+        settings_payload = get_org_settings_payload(db=db, org_id=resolved_org_id)
+        try:
+            assert_agent_controls(settings_payload)
+            enforce_rate_limits(db=db, org_id=resolved_org_id, settings_payload=settings_payload)
+        except Exception:
+            return "blocked"
+
+        plans = plans_for_org(db=db, org_id=resolved_org_id)
+        if not plans:
+            return "no_plans"
+
+        created_count = 0
+        for plan in plans:
+            safe_plan = enforce_plan_safety(plan=plan, settings_payload=settings_payload)
+            snapshot = build_context_snapshot(db=db, org_id=resolved_org_id)
+            row = create_agent_run_row(
+                db=db,
+                org_id=resolved_org_id,
+                agent_name=safe_plan.agent_name,
+                agent_version=safe_plan.agent_version,
+                trigger_type=trigger,
+                context_snapshot_json=snapshot.model_dump(),
+                perception_json={
+                    "observations": [],
+                    "opportunities": [
+                        {
+                            "type": "objective",
+                            "objective": safe_plan.objective,
+                            "estimated_impact": 0.5,
+                            "effort": "medium",
+                        }
+                    ],
+                    "risks": [
+                        {
+                            "type": "plan",
+                            "risk_tier": safe_plan.overall_risk_tier,
+                            "note": safe_plan.rationale,
+                        }
+                    ],
+                },
+                plan_json=safe_plan.model_dump(),
+                status_value=AgentRunStatus.PROPOSED,
+            )
+
+            _write_system_event(
+                db=db,
+                org_id=resolved_org_id,
+                channel="automations",
+                event_type="AGENT_RUN_CREATED",
+                content_id=row.id,
+                payload={
+                    "agent_run_id": str(row.id),
+                    "agent_name": row.agent_name,
+                    "trigger_type": trigger,
+                    "trigger_event_id": str(trigger_event_uuid) if trigger_event_uuid else None,
+                },
+            )
+            _write_system_event(
+                db=db,
+                org_id=resolved_org_id,
+                channel="automations",
+                event_type="AGENT_PLAN_PROPOSED",
+                content_id=row.id,
+                payload={"agent_run_id": str(row.id), "overall_risk_tier": safe_plan.overall_risk_tier},
+            )
+
+            if requires_approval(plan=safe_plan, settings_payload=settings_payload):
+                db.add(
+                    Approval(
+                        org_id=resolved_org_id,
+                        entity_type=ApprovalEntityType.AGENT_RUN,
+                        entity_id=row.id,
+                        status=ApprovalStatus.PENDING,
+                        requested_by=None,
+                        notes=approval_block_reason(plan=safe_plan, settings_payload=settings_payload),
+                    )
+                )
+                row.status = AgentRunStatus.BLOCKED
+                row.error_json = {
+                    "approval_required": True,
+                    "reason": approval_block_reason(plan=safe_plan, settings_payload=settings_payload),
+                }
+                _write_system_event(
+                    db=db,
+                    org_id=resolved_org_id,
+                    channel="automations",
+                    event_type="AGENT_PLAN_APPROVAL_REQUESTED",
+                    content_id=row.id,
+                    payload={"agent_run_id": str(row.id), "overall_risk_tier": safe_plan.overall_risk_tier},
+                )
+            else:
+                row.status = AgentRunStatus.APPROVED
+                app.send_task("worker.agents.execute", args=[str(row.id)])
+
+            created_count += 1
+
+        db.commit()
+        return f"created:{created_count}"
+
+
+@app.task(name="worker.agents.execute")
+def agent_execute(agent_run_id: str) -> str:
+    from app.models import AgentRun, AgentRunStatus, Workflow, WorkflowActionRun, WorkflowActionRunStatus, WorkflowRun, WorkflowRunStatus, WorkflowTriggerType
+    from packages.schemas.phase16 import AgentPlanJSON
+
+    run_id = uuid.UUID(agent_run_id)
+    with SessionLocal() as db:
+        row = db.scalar(select(AgentRun).where(AgentRun.id == run_id, AgentRun.deleted_at.is_(None)))
+        if row is None:
+            return "missing"
+        if not _org_is_active(db=db, org_id=row.org_id):
+            row.status = AgentRunStatus.BLOCKED
+            row.error_json = {"error": "ORG_NOT_ACTIVE"}
+            row.finished_at = _now()
+            db.commit()
+            return "blocked"
+
+        if row.status not in {AgentRunStatus.APPROVED, AgentRunStatus.EXECUTING}:
+            return "not_ready"
+
+        plan = AgentPlanJSON.model_validate(row.plan_json if isinstance(row.plan_json, dict) else {})
+        row.status = AgentRunStatus.EXECUTING
+        db.flush()
+
+        workflow_key = "agent-orchestrator"
+        workflow = db.scalar(
+            select(Workflow).where(
+                Workflow.org_id == row.org_id,
+                Workflow.key == workflow_key,
+                Workflow.deleted_at.is_(None),
+            )
+        )
+        if workflow is None:
+            workflow = Workflow(
+                org_id=row.org_id,
+                key=workflow_key,
+                name="Agent Orchestrator",
+                enabled=True,
+                trigger_type=WorkflowTriggerType.EVENT,
+                managed_by_pack=False,
+                definition_json={},
+            )
+            db.add(workflow)
+            db.flush()
+
+        workflow_run = WorkflowRun(
+            org_id=row.org_id,
+            workflow_id=workflow.id,
+            trigger_event_id=None,
+            status=WorkflowRunStatus.QUEUED,
+            started_at=_now(),
+            finished_at=None,
+            summary_json={"source": "agent", "agent_run_id": str(row.id), "plan_id": plan.plan_id},
+            error_json={},
+            loop_guard_hits=0,
+        )
+        db.add(workflow_run)
+        db.flush()
+
+        queued = 0
+        for step in plan.steps:
+            idempotency_key = _agent_step_idempotency_key(
+                row.org_id,
+                row.id,
+                step.step_id,
+                step.target_ref,
+            )
+            existing = db.scalar(
+                select(WorkflowActionRun).where(
+                    WorkflowActionRun.org_id == row.org_id,
+                    WorkflowActionRun.idempotency_key == idempotency_key,
+                    WorkflowActionRun.deleted_at.is_(None),
+                )
+            )
+            if existing is not None:
+                continue
+
+            action_run = WorkflowActionRun(
+                org_id=row.org_id,
+                workflow_run_id=workflow_run.id,
+                action_type=step.action_type,
+                status=WorkflowActionRunStatus.QUEUED,
+                idempotency_key=idempotency_key,
+                input_json={
+                    "params_json": step.inputs_json,
+                    "risk_tier": step.risk_tier,
+                    "depth": 1,
+                    "agent_run_id": str(row.id),
+                    "plan_id": plan.plan_id,
+                    "step_id": step.step_id,
+                    "target_ref": step.target_ref,
+                },
+                output_json={},
+                error_json={},
+            )
+            db.add(action_run)
+            db.flush()
+            app.send_task("worker.workflow.action.execute", args=[str(action_run.id)])
+            _write_system_event(
+                db=db,
+                org_id=row.org_id,
+                channel="automations",
+                event_type="AGENT_STEP_EXECUTION_STARTED",
+                content_id=workflow_run.id,
+                payload={"agent_run_id": str(row.id), "step_id": step.step_id, "action_run_id": str(action_run.id)},
+            )
+            queued += 1
+
+        row.status = AgentRunStatus.SUCCEEDED
+        row.finished_at = _now()
+        workflow_run.status = WorkflowRunStatus.QUEUED if queued > 0 else WorkflowRunStatus.SUCCEEDED
+        if queued == 0:
+            workflow_run.finished_at = _now()
+        _write_system_event(
+            db=db,
+            org_id=row.org_id,
+            channel="automations",
+            event_type="AGENT_RUN_COMPLETED",
+            content_id=row.id,
+            payload={"agent_run_id": str(row.id), "queued_actions": queued},
+        )
+        db.commit()
+        return "queued" if queued > 0 else "succeeded"
+
+
+@app.task(name="worker.agents.schedule_tick")
+def agent_schedule_tick() -> int:
+    from app.models import AgentRun
+
+    now = _now()
+    created = 0
+
+    with SessionLocal() as db:
+        org_ids = db.scalars(select(Org.id).where(Org.deleted_at.is_(None))).all()
+        for org_id in org_ids:
+            if not _org_is_active(db=db, org_id=org_id):
+                continue
+            payload = _org_settings_payload(db=db, org_id=org_id)
+            if payload.get("enable_agents") is not True:
+                continue
+            if payload.get("agent_schedule_enabled") is False:
+                continue
+
+            scheduled_hour = _as_int(payload.get("agent_schedule_hour_local"), 8)
+            if not _should_run_agent_schedule(schedule_enabled=True, now_hour=now.hour, scheduled_hour=scheduled_hour):
+                continue
+
+            already_today = db.scalar(
+                select(func.count(AgentRun.id)).where(
+                    AgentRun.org_id == org_id,
+                    AgentRun.trigger_type == "schedule",
+                    AgentRun.deleted_at.is_(None),
+                    AgentRun.created_at >= datetime(now.year, now.month, now.day, tzinfo=timezone.utc),
+                )
+            )
+            if int(already_today or 0) > 0:
+                continue
+
+            app.send_task("worker.agents.run_create", kwargs={"org_id": str(org_id), "trigger": "schedule"})
+            created += 1
+
+        db.commit()
+
+    return created
+
+@app.task(name="worker.agents.metrics_tick")
+def agent_metrics_tick() -> int:
+    from app.models import AgentMetric, AgentRun
+
+    now = _now()
+    period_end = now.date()
+    period_start = (now - timedelta(days=7)).date()
+    created = 0
+
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(AgentRun.org_id, AgentRun.agent_name, func.count(AgentRun.id))
+            .where(
+                AgentRun.deleted_at.is_(None),
+                AgentRun.created_at >= datetime.combine(period_start, datetime.min.time(), tzinfo=timezone.utc),
+                AgentRun.created_at <= datetime.combine(period_end, datetime.max.time(), tzinfo=timezone.utc),
+            )
+            .group_by(AgentRun.org_id, AgentRun.agent_name)
+        ).all()
+
+        for org_id, agent_name, count_raw in rows:
+            row = db.scalar(
+                select(AgentMetric).where(
+                    AgentMetric.org_id == org_id,
+                    AgentMetric.agent_name == agent_name,
+                    AgentMetric.period_start == period_start,
+                    AgentMetric.period_end == period_end,
+                    AgentMetric.deleted_at.is_(None),
+                )
+            )
+            metrics_payload: dict[str, object] = {"plans_proposed": int(count_raw or 0)}
+            if row is None:
+                row = AgentMetric(
+                    org_id=org_id,
+                    agent_name=agent_name,
+                    period_start=period_start,
+                    period_end=period_end,
+                    metrics_json=metrics_payload,
+                )
+                db.add(row)
+            else:
+                row.metrics_json = metrics_payload
+            created += 1
+
+        db.commit()
+    return created
 
 @app.task(name="worker.billing.status_sync_tick")
 def billing_status_sync_tick() -> int:
@@ -1569,6 +1951,13 @@ def retention_enforcer_tick() -> int:
                 )
         db.commit()
     return soft_deleted
+
+
+
+
+
+
+
 
 
 

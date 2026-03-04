@@ -267,3 +267,127 @@ export async function listAdminVerticalPerformance(): Promise<AdminVerticalPerfo
 }
 
 
+
+export type AgentContextSnapshot = {
+  org_id: string;
+  active_pack_slug: string;
+  modes: Record<string, string>;
+  entitlements_summary: Record<string, unknown>;
+  compliance_mode: string;
+  risk_limits: Record<string, unknown>;
+  recent_events_summary: Record<string, number>;
+  inbox_summary: Record<string, number>;
+  leads_summary: Record<string, number>;
+  optimization_signals: Record<string, number>;
+  presence_summary: Record<string, number>;
+  seo_summary: Record<string, number>;
+  reputation_summary: Record<string, number>;
+  re_ops_summary?: Record<string, number>;
+};
+
+export type AgentRunListItem = {
+  id: string;
+  org_id: string;
+  agent_name: string;
+  trigger_type: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+};
+
+export type AgentRunResponse = {
+  id: string;
+  org_id: string;
+  agent_name: string;
+  agent_version: string;
+  trigger_type: string;
+  status: string;
+  context_snapshot_json: AgentContextSnapshot;
+  perception_json: Record<string, unknown>;
+  plan_json: Record<string, unknown>;
+  started_at: string | null;
+  finished_at: string | null;
+  error_json: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function getAgentContext(): Promise<{ snapshot: AgentContextSnapshot }> {
+  return apiFetch<{ snapshot: AgentContextSnapshot }>("/agents/context");
+}
+
+export async function runAgents(triggerType = "manual"): Promise<AgentRunResponse> {
+  return apiFetch<AgentRunResponse>("/agents/run", { method: "POST", body: { trigger_type: triggerType } });
+}
+
+export async function listAgentRuns(limit = 20, offset = 0, status?: string): Promise<AgentRunListItem[]> {
+  const search = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (status) {
+    search.set("status", status);
+  }
+  return apiFetch<AgentRunListItem[]>(`/agents/runs?${search.toString()}`);
+}
+
+export async function getAgentRun(runId: string): Promise<AgentRunResponse> {
+  return apiFetch<AgentRunResponse>(`/agents/runs/${encodeURIComponent(runId)}`);
+}
+
+export type AgentDefinition = {
+  id: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+  supported_packs_json: string[];
+  config_json: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function listAgentDefinitions(): Promise<AgentDefinition[]> {
+  return apiFetch<AgentDefinition[]>("/agents/definitions");
+}
+
+export async function updateAgentDefinition(name: string, enabled: boolean): Promise<AgentDefinition> {
+  return apiFetch<AgentDefinition>(`/agents/definitions/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: { enabled },
+  });
+}
+
+export async function executeAgentRun(runId: string): Promise<AgentRunResponse> {
+  return apiFetch<AgentRunResponse>(`/agents/runs/${encodeURIComponent(runId)}/execute`, { method: "POST" });
+}
+
+export type Approval = {
+  id: string;
+  org_id: string;
+  entity_type: string;
+  entity_id: string;
+  status: string;
+  requested_by: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export async function listApprovals(limit = 50, offset = 0, status?: string): Promise<Approval[]> {
+  const search = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (status) {
+    search.set("status", status);
+  }
+  return apiFetch<Approval[]>(`/approvals?${search.toString()}`);
+}
+
+export async function approveApproval(approvalId: string, notes = "Approved from agents UI"): Promise<Approval> {
+  return apiFetch<Approval>(`/approvals/${encodeURIComponent(approvalId)}/approve`, {
+    method: "POST",
+    body: { notes },
+  });
+}
+
+export async function rejectApproval(approvalId: string, notes = "Rejected from agents UI"): Promise<Approval> {
+  return apiFetch<Approval>(`/approvals/${encodeURIComponent(approvalId)}/reject`, {
+    method: "POST",
+    body: { notes },
+  });
+}

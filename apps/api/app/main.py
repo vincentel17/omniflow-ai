@@ -7,6 +7,7 @@ from starlette.responses import Response
 
 from .routers.admin import router as admin_router
 from .routers.ads import router as ads_router
+from .routers.agents import router as agents_router
 from .routers.analytics import router as analytics_router
 from .routers.approvals import router as approvals_router
 from .routers.audit import router as audit_router
@@ -89,3 +90,7 @@ app.include_router(billing_router)
 app.include_router(ads_router)
 app.include_router(compliance_router)
 app.include_router(optimization_router)
+app.include_router(agents_router)
+
+
+

@@ -8,7 +8,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Approval, ApprovalStatus, Role, WorkflowActionRun, WorkflowActionRunStatus
+from ..models import AgentRun, AgentRunStatus, Approval, ApprovalStatus, Role, WorkflowActionRun, WorkflowActionRunStatus
 from ..schemas import ApprovalDecisionRequest, ApprovalResponse
 from ..services.audit import write_audit_log
 from ..services.events import write_event
@@ -102,6 +102,24 @@ def approve(
             except Exception:
                 pass
 
+    if row.entity_type.value in {"agent_run", "agent_plan"}:
+        agent_run = db.scalar(
+            org_scoped(
+                select(AgentRun).where(AgentRun.id == row.entity_id, AgentRun.deleted_at.is_(None)),
+                context.current_org_id,
+                AgentRun,
+            )
+        )
+        if agent_run is not None:
+            agent_run.status = AgentRunStatus.APPROVED
+            db.flush()
+            try:
+                from omniflow_worker.main import app as worker_app  # type: ignore
+
+                worker_app.send_task("worker.agents.execute", args=[str(agent_run.id)])
+            except Exception:
+                pass
+
     write_audit_log(
         db=db,
         context=context,
@@ -158,6 +176,19 @@ def reject(
         )
         if action_run is not None:
             action_run.status = WorkflowActionRunStatus.BLOCKED
+
+    if row.entity_type.value in {"agent_run", "agent_plan"}:
+        agent_run = db.scalar(
+            org_scoped(
+                select(AgentRun).where(AgentRun.id == row.entity_id, AgentRun.deleted_at.is_(None)),
+                context.current_org_id,
+                AgentRun,
+            )
+        )
+        if agent_run is not None:
+            agent_run.status = AgentRunStatus.BLOCKED
+            agent_run.finished_at = _utcnow()
+            agent_run.error_json = {"error": "approval_rejected", "approval_id": str(row.id)}
 
     write_audit_log(
         db=db,

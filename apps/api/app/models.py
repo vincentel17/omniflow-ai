@@ -59,6 +59,8 @@ class ApprovalEntityType(str, enum.Enum):
     AD_CREATIVE = "ad_creative"
     AD_SPEND_CHANGE = "ad_spend_change"
     AD_EXPERIMENT = "ad_experiment"
+    AGENT_RUN = "agent_run"
+    AGENT_PLAN = "agent_plan"
 
 
 class ApprovalStatus(str, enum.Enum):
@@ -98,6 +100,16 @@ class WorkflowActionRunStatus(str, enum.Enum):
     BLOCKED = "blocked"
     APPROVAL_PENDING = "approval_pending"
     SKIPPED = "skipped"
+
+
+class AgentRunStatus(str, enum.Enum):
+    PLANNED = "planned"
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    EXECUTING = "executing"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    BLOCKED = "blocked"
 
 
 class AdProvider(str, enum.Enum):
@@ -650,6 +662,60 @@ class WorkflowActionRun(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     input_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     output_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     error_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class AgentDefinition(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "agent_definitions"
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_agent_definitions_name_version"),
+        Index("ix_agent_definitions_created_at", "created_at"),
+    )
+
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    supported_packs_json: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    config_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class AgentRun(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("ix_agent_runs_org_id", "org_id"),
+        Index("ix_agent_runs_created_at", "created_at"),
+        Index("ix_agent_runs_org_agent_status", "org_id", "agent_name", "status"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    agent_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    agent_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    status: Mapped[AgentRunStatus] = mapped_column(
+        Enum(AgentRunStatus, name="agent_run_status_enum", values_callable=_enum_values),
+        nullable=False,
+        default=AgentRunStatus.PLANNED,
+    )
+    context_snapshot_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    perception_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    plan_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
+
+
+class AgentMetric(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "agent_metrics"
+    __table_args__ = (
+        UniqueConstraint("org_id", "agent_name", "period_start", "period_end", name="uq_agent_metrics_period"),
+        Index("ix_agent_metrics_org_id", "org_id"),
+        Index("ix_agent_metrics_created_at", "created_at"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orgs.id"), nullable=False)
+    agent_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    period_start: Mapped[date] = mapped_column(nullable=False)
+    period_end: Mapped[date] = mapped_column(nullable=False)
+    metrics_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
 
 class CampaignPlan(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "campaign_plans"
@@ -1686,6 +1752,9 @@ class OnboardingSession(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     )
     steps_json: Mapped[dict[str, object]] = mapped_column(JsonType, nullable=False, default=dict)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+
 
 
 

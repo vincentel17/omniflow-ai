@@ -27,6 +27,14 @@ TEST_USER_ID = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 TEST_ORG_ID = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 OTHER_ORG_ID = uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
 
+def _build_default_redis_url() -> str:
+    host = os.environ.get("TEST_REDIS_HOST", os.environ.get("REDIS_HOST", "localhost"))
+    port = os.environ.get("TEST_REDIS_PORT", os.environ.get("REDIS_PORT_HOST", os.environ.get("REDIS_PORT", "6379")))
+    db = os.environ.get("TEST_REDIS_DB", "0")
+    return f"redis://{host}:{port}/{db}"
+
+
+os.environ["REDIS_URL"] = os.environ.get("TEST_REDIS_URL", _build_default_redis_url())
 
 def _build_default_db_url() -> str:
     user = os.environ.get("POSTGRES_USER", "omniflow")
@@ -102,7 +110,7 @@ def db_session(migrated_db: None, db_url: str) -> Generator[Session, None, None]
                 "re_listing_packages, re_cma_comparables, re_cma_reports, re_communication_logs, re_document_requests, "
                 "re_checklist_items, re_checklist_templates, re_deals, "
                 "onboarding_sessions, "
-                "connector_dead_letters, connector_workflow_runs, connector_health, oauth_tokens, connector_accounts, data_retention_policies, dsar_requests, permission_audit_reports, usage_metrics, org_subscriptions, subscription_plans, global_admins, predictive_lead_scores, posting_optimizations, ad_budget_recommendations, model_metadata, org_optimization_settings, "
+                "connector_dead_letters, connector_workflow_runs, connector_health, oauth_tokens, connector_accounts, data_retention_policies, dsar_requests, permission_audit_reports, usage_metrics, org_subscriptions, subscription_plans, global_admins, predictive_lead_scores, posting_optimizations, ad_budget_recommendations, model_metadata, org_optimization_settings, agent_metrics, agent_runs, agent_definitions, "
                 "audit_logs, events, vertical_packs, vertical_pack_registry, integrations, memberships, users, orgs "
                 "RESTART IDENTITY CASCADE"
             )
@@ -133,6 +141,10 @@ def seeded_context(db_session: Session) -> dict[str, str]:
         "X-Omniflow-Org-Id": str(TEST_ORG_ID),
         "X-Omniflow-Role": Role.OWNER.value,
     }
+
+
+
+
 
 
 

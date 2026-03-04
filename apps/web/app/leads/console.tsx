@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { getNextBestAction } from "../../lib/api";
 import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
 
 type Lead = {
@@ -17,7 +18,19 @@ type Lead = {
 
 type Score = { score_total: number; score_json: Record<string, unknown> };
 type Assignment = { assigned_to_user_id: string; rule_applied: string };
-type NurtureTask = { id: string; type: string; due_at: string; status: string; template_key: string | null };
+type NurtureTask = {
+  id: string;
+  type: string;
+  due_at: string;
+  status: string;
+  template_key: string | null;
+};
+type NextBestAction = {
+  action_type: string;
+  rationale: string;
+  expected_uplift: number;
+  confidence_score: number;
+};
 
 type Props = { initialLeads: Lead[] };
 
@@ -27,7 +40,7 @@ function headers(): Record<string, string> {
     "Content-Type": "application/json",
     "X-Omniflow-User-Id": context.userId,
     "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
+    "X-Omniflow-Role": context.role,
   };
 }
 
@@ -37,11 +50,19 @@ export function LeadsConsole({ initialLeads }: Props) {
   const [score, setScore] = useState<Score | null>(null);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [tasks, setTasks] = useState<NurtureTask[]>([]);
+  const [nextBestAction, setNextBestAction] = useState<NextBestAction | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const selectedLead = useMemo(() => leads.find((item) => item.id === selectedLeadId) ?? null, [leads, selectedLeadId]);
+
+  const selectedLead = useMemo(
+    () => leads.find((item) => item.id === selectedLeadId) ?? null,
+    [leads, selectedLeadId],
+  );
 
   async function refreshLeads() {
-    const response = await fetch(`${getApiBaseUrl()}/leads?limit=50&offset=0`, { headers: headers(), cache: "no-store" });
+    const response = await fetch(`${getApiBaseUrl()}/leads?limit=50&offset=0`, {
+      headers: headers(),
+      cache: "no-store",
+    });
     if (!response.ok) {
       setStatus(`Refresh failed (${response.status})`);
       return;
@@ -52,17 +73,26 @@ export function LeadsConsole({ initialLeads }: Props) {
   async function loadTasks(leadId: string) {
     const response = await fetch(`${getApiBaseUrl()}/leads/${leadId}/nurture/tasks?limit=50&offset=0`, {
       headers: headers(),
-      cache: "no-store"
+      cache: "no-store",
     });
     if (!response.ok) return;
     setTasks((await response.json()) as NurtureTask[]);
+  }
+
+  async function loadNextBestAction(leadId: string) {
+    try {
+      const suggestion = await getNextBestAction("lead", leadId);
+      setNextBestAction(suggestion);
+    } catch {
+      setNextBestAction(null);
+    }
   }
 
   async function scoreLead() {
     if (!selectedLead) return;
     const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/score`, {
       method: "POST",
-      headers: headers()
+      headers: headers(),
     });
     if (!response.ok) {
       setStatus(`Score failed (${response.status})`);
@@ -76,7 +106,7 @@ export function LeadsConsole({ initialLeads }: Props) {
     if (!selectedLead) return;
     const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/route`, {
       method: "POST",
-      headers: headers()
+      headers: headers(),
     });
     if (!response.ok) {
       setStatus(`Route failed (${response.status})`);
@@ -91,7 +121,7 @@ export function LeadsConsole({ initialLeads }: Props) {
     if (!selectedLead) return;
     const suggest = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/suggest`, {
       method: "POST",
-      headers: headers()
+      headers: headers(),
     });
     if (!suggest.ok) {
       setStatus(`Suggest nurture failed (${suggest.status})`);
@@ -101,7 +131,7 @@ export function LeadsConsole({ initialLeads }: Props) {
     const apply = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/apply`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ tasks: plan.tasks })
+      body: JSON.stringify({ tasks: plan.tasks }),
     });
     if (!apply.ok) {
       setStatus(`Apply nurture failed (${apply.status})`);
@@ -116,7 +146,7 @@ export function LeadsConsole({ initialLeads }: Props) {
     const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/tasks/${taskId}`, {
       method: "PATCH",
       headers: headers(),
-      body: JSON.stringify({ status: "done" })
+      body: JSON.stringify({ status: "done" }),
     });
     if (!response.ok) {
       setStatus(`Task update failed (${response.status})`);
@@ -140,6 +170,7 @@ export function LeadsConsole({ initialLeads }: Props) {
                 onClick={() => {
                   setSelectedLeadId(lead.id);
                   void loadTasks(lead.id);
+                  void loadNextBestAction(lead.id);
                 }}
                 type="button"
               >
@@ -167,12 +198,27 @@ export function LeadsConsole({ initialLeads }: Props) {
                 Apply Nurture
               </button>
             </div>
-            {score ? <pre className="mt-3 overflow-auto rounded bg-slate-900 p-2 text-xs">{JSON.stringify(score, null, 2)}</pre> : null}
+            {score ? (
+              <pre className="mt-3 overflow-auto rounded bg-slate-900 p-2 text-xs">{JSON.stringify(score, null, 2)}</pre>
+            ) : null}
             {assignment ? (
               <p className="mt-3 text-sm text-slate-300">
                 Assigned to {assignment.assigned_to_user_id} via {assignment.rule_applied}
               </p>
             ) : null}
+            <h3 className="mt-4 font-medium">Next Best Action</h3>
+            {nextBestAction ? (
+              <div className="mt-2 rounded border border-slate-800 p-2 text-sm">
+                <p className="font-medium">{nextBestAction.action_type}</p>
+                <p className="text-slate-300">{nextBestAction.rationale}</p>
+                <p className="text-slate-400">
+                  Expected uplift: {(nextBestAction.expected_uplift * 100).toFixed(1)}% | Confidence:{" "}
+                  {(nextBestAction.confidence_score * 100).toFixed(1)}%
+                </p>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">No next-best-action suggestion available.</p>
+            )}
             <h3 className="mt-4 font-medium">Nurture Tasks</h3>
             <ul className="mt-2 space-y-2 text-sm">
               {tasks.map((task) => (
@@ -182,7 +228,11 @@ export function LeadsConsole({ initialLeads }: Props) {
                       {task.type} | {task.status} | {task.template_key ?? "manual"}
                     </span>
                     {task.status !== "done" ? (
-                      <button className="rounded bg-slate-700 px-2 py-1 text-xs" onClick={() => markTaskDone(task.id)} type="button">
+                      <button
+                        className="rounded bg-slate-700 px-2 py-1 text-xs"
+                        onClick={() => markTaskDone(task.id)}
+                        type="button"
+                      >
                         Mark Done
                       </button>
                     ) : null}

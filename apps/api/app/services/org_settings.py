@@ -49,6 +49,24 @@ DEFAULT_ORG_SETTINGS: dict[str, Any] = {
     "default_autonomy_max_tier": 1,
     "business_hours_start_hour": 9,
     "business_hours_end_hour": 17,
+    "enable_agents": False,
+    "agent_autonomy_max_tier": 1,
+    "agent_max_plans_per_day": 3,
+    "agent_max_steps_per_plan": 10,
+    "agent_cooldown_minutes": 60,
+    "agent_schedule_enabled": True,
+    "agent_schedule_hour_local": 8,
+    "agent_allowed_action_types_json": [
+        "CREATE_TASK",
+        "ROUTE_LEAD",
+        "APPLY_NURTURE_PLAN",
+        "CREATE_CONTENT_DRAFT",
+        "SCHEDULE_PUBLISH",
+        "RUN_PRESENCE_AUDIT",
+        "DRAFT_REPLY",
+        "TAG_LEAD",
+    ],
+    "agent_disallowed_targets_json": [],
 }
 
 
@@ -119,6 +137,17 @@ def _safe_ads_budget_caps(value: Any) -> dict[str, float]:
     }
 
 
+
+def _safe_string_list(value: Any, fallback: list[str]) -> list[str]:
+    if not isinstance(value, list):
+        return list(fallback)
+    out: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            normalized = item.strip()
+            if normalized:
+                out.append(normalized)
+    return out if out else list(fallback)
 def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
     source = raw or {}
     normalized = dict(DEFAULT_ORG_SETTINGS)
@@ -213,6 +242,52 @@ def normalize_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
         int(DEFAULT_ORG_SETTINGS["business_hours_end_hour"]),
         minimum=0,
         maximum=23,
+    )
+    normalized["enable_agents"] = _safe_bool(
+        source.get("enable_agents"),
+        bool(DEFAULT_ORG_SETTINGS["enable_agents"]),
+    )
+    normalized["agent_autonomy_max_tier"] = _safe_int(
+        source.get("agent_autonomy_max_tier"),
+        int(DEFAULT_ORG_SETTINGS["agent_autonomy_max_tier"]),
+        minimum=0,
+        maximum=5,
+    )
+    normalized["agent_max_plans_per_day"] = _safe_int(
+        source.get("agent_max_plans_per_day"),
+        int(DEFAULT_ORG_SETTINGS["agent_max_plans_per_day"]),
+        minimum=1,
+        maximum=100,
+    )
+    normalized["agent_max_steps_per_plan"] = _safe_int(
+        source.get("agent_max_steps_per_plan"),
+        int(DEFAULT_ORG_SETTINGS["agent_max_steps_per_plan"]),
+        minimum=1,
+        maximum=50,
+    )
+    normalized["agent_cooldown_minutes"] = _safe_int(
+        source.get("agent_cooldown_minutes"),
+        int(DEFAULT_ORG_SETTINGS["agent_cooldown_minutes"]),
+        minimum=0,
+        maximum=1440,
+    )
+    normalized["agent_schedule_enabled"] = _safe_bool(
+        source.get("agent_schedule_enabled"),
+        bool(DEFAULT_ORG_SETTINGS["agent_schedule_enabled"]),
+    )
+    normalized["agent_schedule_hour_local"] = _safe_int(
+        source.get("agent_schedule_hour_local"),
+        int(DEFAULT_ORG_SETTINGS["agent_schedule_hour_local"]),
+        minimum=0,
+        maximum=23,
+    )
+    normalized["agent_allowed_action_types_json"] = _safe_string_list(
+        source.get("agent_allowed_action_types_json"),
+        list(DEFAULT_ORG_SETTINGS["agent_allowed_action_types_json"]),
+    )
+    normalized["agent_disallowed_targets_json"] = _safe_string_list(
+        source.get("agent_disallowed_targets_json"),
+        list(DEFAULT_ORG_SETTINGS["agent_disallowed_targets_json"]),
     )
     if isinstance(source.get("automation_weights"), dict):
         normalized["automation_weights"] = source["automation_weights"]
@@ -323,5 +398,11 @@ def ads_budget_caps_for_org(db: Session, org_id: uuid.UUID) -> dict[str, float]:
         "org_monthly_cap_usd": 200.0,
         "per_campaign_cap_usd": 50.0,
     }
+
+
+
+
+
+
 
 

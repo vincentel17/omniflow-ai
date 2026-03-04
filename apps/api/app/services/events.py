@@ -9,6 +9,8 @@ from packages.security import redact_mapping
 
 from ..models import Event
 
+_AGENT_TRIGGER_EVENTS: set[str] = {"SLA_ESCALATED"}
+
 
 def _enqueue_workflow_evaluation(event_id: uuid.UUID) -> None:
     try:
@@ -17,6 +19,17 @@ def _enqueue_workflow_evaluation(event_id: uuid.UUID) -> None:
         worker_app.send_task("worker.workflow.evaluate", args=[str(event_id)])
     except Exception:
         # Keep event writes non-blocking even if worker broker is unavailable.
+        return
+
+
+def _enqueue_agent_orchestrator(event_id: uuid.UUID, event_type: str) -> None:
+    if event_type not in _AGENT_TRIGGER_EVENTS:
+        return
+    try:
+        from omniflow_worker.main import app as worker_app  # type: ignore
+
+        worker_app.send_task("worker.agents.run_create", kwargs={"event_id": str(event_id), "trigger": "event"})
+    except Exception:
         return
 
 
@@ -46,7 +59,5 @@ def write_event(
     db.add(event)
     db.flush()
     _enqueue_workflow_evaluation(event.id)
+    _enqueue_agent_orchestrator(event.id, event_type)
     return event
-
-
-

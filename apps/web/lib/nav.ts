@@ -47,8 +47,11 @@ export const navSections: NavSection[] = [
       { href: "/settings/integrations", label: "Integrations", icon: "plug" },
       { href: "/automations/workflows", label: "Automations", icon: "sparkles" },
       { href: "/automations/runs", label: "Runs", icon: "chart" },
+      { href: "/automations/agents", label: "Agents", icon: "sparkles" },
+      { href: "/automations/agents/runs", label: "Agent Runs", icon: "chart" },
       { href: "/compliance", label: "Compliance", icon: "shield" },
       { href: "/events", label: "Events", icon: "list" }
     ]
   }
 ];
+

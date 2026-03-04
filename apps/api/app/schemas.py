@@ -549,6 +549,15 @@ class OpsSettingsResponse(BaseModel):
     ads_canary_mode: bool = True
     require_approval_for_ads: bool = True
     compliance_mode: str = Field(default="none", pattern="^(none|real_estate|home_care)$")
+    enable_agents: bool = False
+    agent_autonomy_max_tier: int = Field(default=1, ge=0, le=5)
+    agent_max_plans_per_day: int = Field(default=3, ge=1, le=100)
+    agent_max_steps_per_plan: int = Field(default=10, ge=1, le=50)
+    agent_cooldown_minutes: int = Field(default=60, ge=0, le=1440)
+    agent_schedule_enabled: bool = True
+    agent_schedule_hour_local: int = Field(default=8, ge=0, le=23)
+    agent_allowed_action_types_json: list[str] = Field(default_factory=list)
+    agent_disallowed_targets_json: list[str] = Field(default_factory=list)
 
 class OpsSettingsPatchRequest(BaseModel):
     enable_auto_posting: bool | None = None
@@ -576,6 +585,15 @@ class OpsSettingsPatchRequest(BaseModel):
     ads_canary_mode: bool | None = None
     require_approval_for_ads: bool | None = None
     compliance_mode: str | None = Field(default=None, pattern="^(none|real_estate|home_care)$")
+    enable_agents: bool | None = None
+    agent_autonomy_max_tier: int | None = Field(default=None, ge=0, le=5)
+    agent_max_plans_per_day: int | None = Field(default=None, ge=1, le=100)
+    agent_max_steps_per_plan: int | None = Field(default=None, ge=1, le=50)
+    agent_cooldown_minutes: int | None = Field(default=None, ge=0, le=1440)
+    agent_schedule_enabled: bool | None = None
+    agent_schedule_hour_local: int | None = Field(default=None, ge=0, le=23)
+    agent_allowed_action_types_json: list[str] | None = None
+    agent_disallowed_targets_json: list[str] | None = None
 class OnboardingSessionResponse(BaseModel):
     id: uuid.UUID
     org_id: uuid.UUID
@@ -970,6 +988,40 @@ class WorkflowActionRunResponse(BaseModel):
     created_at: datetime
 
 
+class AgentRunCreateRequest(BaseModel):
+    trigger_type: str = Field(default="manual", pattern="^(manual|schedule|event)$")
+
+
+class AgentContextResponse(BaseModel):
+    snapshot: dict[str, object]
+
+
+class AgentRunResponse(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    agent_name: str
+    agent_version: str
+    trigger_type: str
+    status: str
+    context_snapshot_json: dict[str, object]
+    perception_json: dict[str, object]
+    plan_json: dict[str, object]
+    started_at: datetime | None
+    finished_at: datetime | None
+    error_json: dict[str, object]
+    created_at: datetime
+
+
+class AgentRunListItem(BaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    agent_name: str
+    trigger_type: str
+    status: str
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+
 class ApprovalResponse(BaseModel):
     id: uuid.UUID
     org_id: uuid.UUID
@@ -991,6 +1043,15 @@ class AdsSettingsResponse(BaseModel):
     ads_canary_mode: bool = True
     require_approval_for_ads: bool = True
     compliance_mode: str = Field(default="none", pattern="^(none|real_estate|home_care)$")
+    enable_agents: bool = False
+    agent_autonomy_max_tier: int = Field(default=1, ge=0, le=5)
+    agent_max_plans_per_day: int = Field(default=3, ge=1, le=100)
+    agent_max_steps_per_plan: int = Field(default=10, ge=1, le=50)
+    agent_cooldown_minutes: int = Field(default=60, ge=0, le=1440)
+    agent_schedule_enabled: bool = True
+    agent_schedule_hour_local: int = Field(default=8, ge=0, le=23)
+    agent_allowed_action_types_json: list[str] = Field(default_factory=list)
+    agent_disallowed_targets_json: list[str] = Field(default_factory=list)
 
 class AdsSettingsPatchRequest(BaseModel):
     enable_ads_automation: bool | None = None
@@ -1000,6 +1061,15 @@ class AdsSettingsPatchRequest(BaseModel):
     ads_canary_mode: bool | None = None
     require_approval_for_ads: bool | None = None
     compliance_mode: str | None = Field(default=None, pattern="^(none|real_estate|home_care)$")
+    enable_agents: bool | None = None
+    agent_autonomy_max_tier: int | None = Field(default=None, ge=0, le=5)
+    agent_max_plans_per_day: int | None = Field(default=None, ge=1, le=100)
+    agent_max_steps_per_plan: int | None = Field(default=None, ge=1, le=50)
+    agent_cooldown_minutes: int | None = Field(default=None, ge=0, le=1440)
+    agent_schedule_enabled: bool | None = None
+    agent_schedule_hour_local: int | None = Field(default=None, ge=0, le=23)
+    agent_allowed_action_types_json: list[str] | None = None
+    agent_disallowed_targets_json: list[str] | None = None
 
 class AdAccountCreateRequest(BaseModel):
     provider: AdProvider
@@ -1359,6 +1429,9 @@ class ModelMetadataResponse(BaseModel):
 
 class ModelActivateRequest(BaseModel):
     version: str = Field(min_length=1, max_length=80)
+
+
+
 
 
 

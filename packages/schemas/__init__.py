@@ -1,4 +1,4 @@
-﻿from packages.schemas.phase3 import (
+from packages.schemas.phase3 import (
     ApprovalDecision,
     CampaignPlanJSON,
     CampaignPlanPost,
@@ -32,6 +32,12 @@ from packages.schemas.phase7 import (
     CMAPricingJSON,
     ListingPackageJSON,
 )
+from packages.schemas.phase16 import (
+    AgentContextSnapshotJSON,
+    AgentDecisionRecordJSON,
+    AgentPerceptionJSON,
+    AgentPlanJSON,
+)
 
 __all__ = [
     "ApprovalDecision",
@@ -60,4 +66,8 @@ __all__ = [
     "CMAComparableInputJSON",
     "CMAPricingJSON",
     "ListingPackageJSON",
+    "AgentContextSnapshotJSON",
+    "AgentPerceptionJSON",
+    "AgentPlanJSON",
+    "AgentDecisionRecordJSON",
 ]
