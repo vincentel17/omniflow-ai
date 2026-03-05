@@ -7,14 +7,24 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.models import (
+    AdAccount,
+    AdCampaign,
+    AdProvider,
     Approval,
     ApprovalEntityType,
     ApprovalStatus,
     Lead,
     LeadStatus,
     OrgSettings,
+    REChecklistItem,
+    REDeal,
+    REDealType,
     ReputationReview,
     ReputationSource,
+    VerticalPack,
+    Workflow,
+    WorkflowActionRun,
+    WorkflowRun,
 )
 
 OTHER_ORG_ID = uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
@@ -113,3 +123,105 @@ async def test_phase16_org_isolation_for_agent_runs(seeded_context: dict[str, st
         other_context["X-Omniflow-Org-Id"] = str(OTHER_ORG_ID)
         hidden = await client.get(f"/agents/runs/{run_id}", headers=other_context)
         assert hidden.status_code == 404
+
+
+@pytest.mark.integration
+async def test_phase16_worker_executes_ads_draft_action(seeded_context: dict[str, str], db_session) -> None:
+    from omniflow_worker.main import _execute_workflow_action
+
+    org_id = uuid.UUID(seeded_context["X-Omniflow-Org-Id"])
+    user_id = uuid.UUID(seeded_context["X-Omniflow-User-Id"])
+    _upsert_agent_settings(db_session, org_id, max_auto_tier=2)
+
+    settings = db_session.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    assert settings is not None
+    payload = dict(settings.settings_json or {})
+    payload.update({"enable_ads_automation": True})
+    settings.settings_json = payload
+
+    account = AdAccount(
+        org_id=org_id,
+        provider=AdProvider.META,
+        account_ref="phase16-meta-acct",
+        display_name="Phase16 Meta",
+    )
+    workflow = Workflow(org_id=org_id, key="phase16-ads-draft", name="Phase16 Ads Draft", definition_json={})
+    db_session.add_all([account, workflow])
+    db_session.commit()
+    db_session.refresh(account)
+    db_session.refresh(workflow)
+
+    run = WorkflowRun(org_id=org_id, workflow_id=workflow.id, summary_json={})
+    db_session.add(run)
+    db_session.flush()
+
+    action_run = WorkflowActionRun(
+        org_id=org_id,
+        workflow_run_id=run.id,
+        action_type="ADS_CREATE_CAMPAIGN_DRAFT",
+        idempotency_key=f"phase16-ads-{uuid.uuid4()}",
+        input_json={
+            "params_json": {
+                "provider": "meta",
+                "ad_account_id": str(account.id),
+                "name": "Phase16 Agent Campaign",
+                "objective": "traffic",
+                "daily_budget_usd": 5,
+            }
+        },
+        output_json={},
+        error_json={},
+    )
+    db_session.add(action_run)
+    db_session.commit()
+
+    result = _execute_workflow_action(db=db_session, action_run_id=action_run.id)
+    db_session.commit()
+
+    campaign = db_session.query(AdCampaign).filter(AdCampaign.id == uuid.UUID(result["ad_campaign_id"])).one()
+    assert campaign.org_id == org_id
+    assert campaign.name == "Phase16 Agent Campaign"
+    assert campaign.created_by == user_id
+
+
+@pytest.mark.integration
+async def test_phase16_worker_executes_real_estate_checklist_action(seeded_context: dict[str, str], db_session) -> None:
+    from omniflow_worker.main import _execute_workflow_action
+
+    org_id = uuid.UUID(seeded_context["X-Omniflow-Org-Id"])
+    _upsert_agent_settings(db_session, org_id, max_auto_tier=2)
+    existing_pack = db_session.query(VerticalPack).filter(VerticalPack.org_id == org_id).first()
+    if existing_pack is None:
+        db_session.add(VerticalPack(org_id=org_id, pack_slug="real-estate"))
+    else:
+        existing_pack.pack_slug = "real-estate"
+    deal = REDeal(org_id=org_id, deal_type=REDealType.BUYER, pipeline_stage="lead")
+    workflow = Workflow(org_id=org_id, key="phase16-re-item", name="Phase16 RE", definition_json={})
+    db_session.add_all([deal, workflow])
+    db_session.commit()
+    db_session.refresh(deal)
+    db_session.refresh(workflow)
+
+    run = WorkflowRun(org_id=org_id, workflow_id=workflow.id, summary_json={})
+    db_session.add(run)
+    db_session.flush()
+
+    action_run = WorkflowActionRun(
+        org_id=org_id,
+        workflow_run_id=run.id,
+        action_type="RE_CREATE_CHECKLIST_ITEM",
+        idempotency_key=f"phase16-re-{uuid.uuid4()}",
+        input_json={"params_json": {"deal_id": str(deal.id), "title": "Agent follow-up"}},
+        output_json={},
+        error_json={},
+    )
+    db_session.add(action_run)
+    db_session.commit()
+
+    result = _execute_workflow_action(db=db_session, action_run_id=action_run.id)
+    db_session.commit()
+
+    checklist = db_session.query(REChecklistItem).filter(REChecklistItem.org_id == org_id, REChecklistItem.deal_id == deal.id).first()
+    assert checklist is not None
+    assert checklist.title == "Agent follow-up"
+    assert result["re_checklist_item_id"] == str(checklist.id)

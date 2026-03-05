@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.services.agents import enforce_plan_safety
@@ -162,3 +163,72 @@ def test_phase16_safety_home_care_marks_health_targets_for_approval() -> None:
     assert len(safe.steps) == 1
     assert safe.steps[0].step_id == "keep-me"
     assert safe.steps[0].requires_approval is True
+
+
+def test_phase16_safety_blocks_ads_without_entitlement() -> None:
+    plan = AgentPlanJSON.model_validate(
+        {
+            "plan_id": str(uuid.uuid4()),
+            "agent_name": "GrowthAgent",
+            "agent_version": "1.0.0",
+            "objective": "ads draft",
+            "steps": [
+                {
+                    "step_id": "ads-step",
+                    "action_type": "ADS_CREATE_CAMPAIGN_DRAFT",
+                    "target_ref": "campaign:new",
+                    "inputs_json": {"provider": "meta", "daily_budget_usd": 5},
+                    "expected_outcome": "create draft",
+                    "risk_tier": 2,
+                    "requires_approval": True,
+                }
+            ],
+            "rationale": "ads",
+            "rollback_strategy": "pause",
+            "limits": {"max_exec_time_seconds": 60, "max_steps": 1},
+        }
+    )
+
+    with pytest.raises(HTTPException):
+        enforce_plan_safety(
+            plan=plan,
+            settings_payload={
+                "agent_max_steps_per_plan": 10,
+                "enable_ads_automation": False,
+            },
+            entitlements_summary={"ads_enabled": False},
+            active_pack_slug="generic",
+        )
+
+
+def test_phase16_safety_blocks_real_estate_steps_when_pack_inactive() -> None:
+    plan = AgentPlanJSON.model_validate(
+        {
+            "plan_id": str(uuid.uuid4()),
+            "agent_name": "RealEstateOpsAgent",
+            "agent_version": "1.0.0",
+            "objective": "re ops",
+            "steps": [
+                {
+                    "step_id": "re-step",
+                    "action_type": "RE_CREATE_CHECKLIST_ITEM",
+                    "target_ref": "deal:1",
+                    "inputs_json": {"deal_id": str(uuid.uuid4()), "title": "Call escrow"},
+                    "expected_outcome": "checklist",
+                    "risk_tier": 1,
+                    "requires_approval": False,
+                }
+            ],
+            "rationale": "re",
+            "rollback_strategy": "delete task",
+            "limits": {"max_exec_time_seconds": 60, "max_steps": 1},
+        }
+    )
+
+    with pytest.raises(HTTPException):
+        enforce_plan_safety(
+            plan=plan,
+            settings_payload={"agent_max_steps_per_plan": 10},
+            entitlements_summary={"allowed_verticals": ["generic"]},
+            active_pack_slug="generic",
+        )

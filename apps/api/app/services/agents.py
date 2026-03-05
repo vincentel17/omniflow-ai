@@ -27,12 +27,17 @@ from ..models import (
     PostingOptimization,
     PredictiveLeadScore,
     PresenceAuditRun,
+    REChecklistItem,
+    REChecklistItemStatus,
+    REDeal,
+    REDealStatus,
     ReputationReview,
     SEOWorkItem,
     VerticalPack,
     WorkflowActionRun,
     WorkflowRun,
 )
+from .billing import get_billing_snapshot
 from .org_settings import get_org_settings_payload
 
 
@@ -107,6 +112,8 @@ def _recent_events_summary(db: Session, org_id: uuid.UUID, hours: int = 24) -> d
 
 def build_context_snapshot(db: Session, org_id: uuid.UUID) -> AgentContextSnapshotJSON:
     settings_payload = get_org_settings_payload(db=db, org_id=org_id)
+    billing_snapshot = get_billing_snapshot(db=db, org_id=org_id)
+    active_pack_slug = _current_pack(db, org_id)
 
     open_threads = int(
         db.scalar(
@@ -200,14 +207,39 @@ def build_context_snapshot(db: Session, org_id: uuid.UUID) -> AgentContextSnapsh
         overall_score = summary_scores.get("overall_score", 100.0)
         if isinstance(overall_score, int | float):
             presence_score = float(overall_score)
+    re_ops_summary: dict[str, int] | None = None
+    if active_pack_slug == "real-estate":
+        open_deals = int(
+            db.scalar(
+                select(func.count(REDeal.id)).where(
+                    REDeal.org_id == org_id,
+                    REDeal.deleted_at.is_(None),
+                    REDeal.status == REDealStatus.ACTIVE,
+                )
+            )
+            or 0
+        )
+        overdue_checklists = int(
+            db.scalar(
+                select(func.count(REChecklistItem.id)).where(
+                    REChecklistItem.org_id == org_id,
+                    REChecklistItem.deleted_at.is_(None),
+                    REChecklistItem.status == REChecklistItemStatus.OPEN,
+                    REChecklistItem.due_at.is_not(None),
+                    REChecklistItem.due_at < _now(),
+                )
+            )
+            or 0
+        )
+        re_ops_summary = {"open_deals": open_deals, "overdue_checklists": overdue_checklists}
     return AgentContextSnapshotJSON(
         org_id=str(org_id),
-        active_pack_slug=_current_pack(db, org_id),
+        active_pack_slug=active_pack_slug,
         modes={
             "ai_mode": str(settings_payload.get("ai_mode", "mock")),
             "connector_mode": str(settings_payload.get("connector_mode", "mock")),
         },
-        entitlements_summary={},
+        entitlements_summary=dict(billing_snapshot.entitlements),
         compliance_mode=str(settings_payload.get("compliance_mode", "none")),
         risk_limits=_risk_limits_from_settings(settings_payload),
         recent_events_summary=_recent_events_summary(db, org_id),
@@ -224,7 +256,7 @@ def build_context_snapshot(db: Session, org_id: uuid.UUID) -> AgentContextSnapsh
         },
         seo_summary={"drafts_pending": seo_drafts},
         reputation_summary={"unresponded_negative_reviews": unresponded_negative_reviews},
-        re_ops_summary={"overdue_checklists": 0},
+        re_ops_summary=re_ops_summary,
     )
 
 
@@ -233,13 +265,28 @@ def assert_agent_controls(settings_payload: dict[str, Any]) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="agents disabled for org")
 
 
-def enforce_plan_safety(plan: AgentPlanJSON, settings_payload: dict[str, Any]) -> AgentPlanJSON:
+def _vertical_allowed(entitlements_summary: dict[str, Any], vertical_slug: str) -> bool:
+    allowed = entitlements_summary.get("allowed_verticals")
+    if not isinstance(allowed, list) or not allowed:
+        return vertical_slug == "generic"
+    tokens = {str(item) for item in allowed}
+    return "*" in tokens or vertical_slug in tokens
+
+
+def enforce_plan_safety(
+    plan: AgentPlanJSON,
+    settings_payload: dict[str, Any],
+    *,
+    entitlements_summary: dict[str, Any] | None = None,
+    active_pack_slug: str = "generic",
+) -> AgentPlanJSON:
     max_steps = int(settings_payload.get("agent_max_steps_per_plan", 10))
     allowed = set(settings_payload.get("agent_allowed_action_types_json", []))
     disallowed_targets = [
         str(item) for item in settings_payload.get("agent_disallowed_targets_json", []) if isinstance(item, str)
     ]
     compliance_mode = str(settings_payload.get("compliance_mode", "none")).lower()
+    entitlements = entitlements_summary if isinstance(entitlements_summary, dict) else {}
 
     filtered_steps = []
     for step in plan.steps[:max_steps]:
@@ -247,6 +294,16 @@ def enforce_plan_safety(plan: AgentPlanJSON, settings_payload: dict[str, Any]) -
             continue
         if allowed and step.action_type not in allowed:
             continue
+        if step.action_type.startswith("ADS_"):
+            if entitlements.get("ads_enabled") is not True:
+                continue
+            if settings_payload.get("enable_ads_automation") is not True:
+                continue
+        if step.action_type.startswith("RE_"):
+            if active_pack_slug != "real-estate":
+                continue
+            if not _vertical_allowed(entitlements, "real-estate"):
+                continue
         target_lower = step.target_ref.lower()
         if any(token.lower() in target_lower for token in disallowed_targets):
             continue

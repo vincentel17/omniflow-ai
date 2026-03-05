@@ -127,9 +127,14 @@ def create_run(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="no agent plans available")
 
     first_row: AgentRun | None = None
+    snapshot = build_context_snapshot(db=db, org_id=context.current_org_id)
     for plan in plans:
-        safe_plan = enforce_plan_safety(plan=plan, settings_payload=settings_payload)
-        snapshot = build_context_snapshot(db=db, org_id=context.current_org_id)
+        safe_plan = enforce_plan_safety(
+            plan=plan,
+            settings_payload=settings_payload,
+            entitlements_summary=snapshot.entitlements_summary,
+            active_pack_slug=snapshot.active_pack_slug,
+        )
         row = create_agent_run_row(
             db=db,
             org_id=context.current_org_id,

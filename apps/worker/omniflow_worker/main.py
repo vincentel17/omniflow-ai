@@ -1,7 +1,7 @@
 import os
 import uuid
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from celery import Celery
 from sqlalchemy import and_, func, select
@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models import (
+    AdAccount,
+    AdCampaign,
+    AdCampaignObjective,
+    AdCampaignStatus,
+    AdProvider,
+    AdSpendLedger,
     AuditLog,
     ConnectorAccount,
     ConnectorHealth,
@@ -31,6 +37,10 @@ from app.models import (
     ModelMetadata,
     ModelStatus,
     OrgSubscription,
+    REChecklistItem,
+    RECMAReport,
+    REDeal,
+    REListingPackage,
     UsageMetric,
     UsageMetricType,
     PresenceAuditRun,
@@ -1283,6 +1293,195 @@ def _execute_workflow_action(db: Session, action_run_id: uuid.UUID) -> dict[str,
         db.flush()
         return {"lead_id": str(lead.id), "tags": lead.tags_json}
 
+    if action_type == "ADS_CREATE_CAMPAIGN_DRAFT":
+        if not _org_feature_enabled(db=db, org_id=org_id, key="enable_ads_automation", fallback=False):
+            raise ValueError("ADS_CREATE_CAMPAIGN_DRAFT blocked by org setting")
+        creator = _first_member_user_id(db=db, org_id=org_id)
+        if creator is None:
+            raise ValueError("No org member available to own ad campaign")
+        from app.services.ads import assert_budget_within_caps
+
+        ad_account_id = params.get("ad_account_id")
+        if ad_account_id is None:
+            provider_name = str(params.get("provider", "meta")).lower()
+            account = db.scalar(
+                select(AdAccount).where(
+                    AdAccount.org_id == org_id,
+                    AdAccount.provider == AdProvider(provider_name),
+                    AdAccount.deleted_at.is_(None),
+                )
+            )
+        else:
+            account = db.scalar(
+                select(AdAccount).where(
+                    AdAccount.id == uuid.UUID(str(ad_account_id)),
+                    AdAccount.org_id == org_id,
+                    AdAccount.deleted_at.is_(None),
+                )
+            )
+        if account is None:
+            raise ValueError("ad account not found")
+        daily_budget_usd = float(params.get("daily_budget_usd", 5.0))
+        assert_budget_within_caps(db=db, org_id=org_id, daily_budget_usd=daily_budget_usd)
+        campaign = AdCampaign(
+            org_id=org_id,
+            provider=account.provider,
+            ad_account_id=account.id,
+            name=str(params.get("name", "Agent Campaign Draft")),
+            objective=AdCampaignObjective(str(params.get("objective", "traffic"))),
+            status=AdCampaignStatus.DRAFT,
+            daily_budget_usd=daily_budget_usd,
+            lifetime_budget_usd=float(params["lifetime_budget_usd"]) if params.get("lifetime_budget_usd") is not None else None,
+            start_at=None,
+            end_at=None,
+            targeting_json=params.get("targeting_json") if isinstance(params.get("targeting_json"), dict) else {},
+            utm_json=params.get("utm_json") if isinstance(params.get("utm_json"), dict) else {},
+            created_by=creator,
+        )
+        db.add(campaign)
+        db.flush()
+        return {"ad_campaign_id": str(campaign.id), "status": campaign.status.value}
+
+    if action_type == "ADS_REQUEST_ACTIVATION":
+        campaign_id = uuid.UUID(str(params.get("campaign_id")))
+        ad_campaign = db.scalar(
+            select(AdCampaign).where(AdCampaign.id == campaign_id, AdCampaign.org_id == org_id, AdCampaign.deleted_at.is_(None))
+        )
+        if ad_campaign is None:
+            raise ValueError("ad campaign not found")
+        ad_campaign.status = AdCampaignStatus.PENDING_ACTIVATION
+        ad_campaign.last_synced_at = _now()
+        db.flush()
+        return {"ad_campaign_id": str(ad_campaign.id), "status": ad_campaign.status.value}
+
+    if action_type == "ADS_SYNC_METRICS":
+        campaign_id_raw = params.get("campaign_id")
+        ad_campaigns: list[AdCampaign] = []
+        if campaign_id_raw is not None:
+            ad_campaign = db.scalar(
+                select(AdCampaign).where(
+                    AdCampaign.id == uuid.UUID(str(campaign_id_raw)),
+                    AdCampaign.org_id == org_id,
+                    AdCampaign.deleted_at.is_(None),
+                )
+            )
+            if ad_campaign is None:
+                raise ValueError("ad campaign not found")
+            ad_campaigns = [ad_campaign]
+        else:
+            ad_campaigns = list(
+                db.scalars(
+                    select(AdCampaign).where(
+                        AdCampaign.org_id == org_id,
+                        AdCampaign.status == AdCampaignStatus.ACTIVE,
+                        AdCampaign.deleted_at.is_(None),
+                    )
+                ).all()
+            )
+        synced = 0
+        today = date.today()
+        for ad_campaign in ad_campaigns:
+            ledger = db.scalar(
+                select(AdSpendLedger).where(
+                    AdSpendLedger.org_id == org_id,
+                    AdSpendLedger.campaign_id == ad_campaign.id,
+                    AdSpendLedger.day == today,
+                    AdSpendLedger.deleted_at.is_(None),
+                )
+            )
+            if ledger is None:
+                ledger = AdSpendLedger(
+                    org_id=org_id,
+                    provider=ad_campaign.provider,
+                    campaign_id=ad_campaign.id,
+                    day=today,
+                    spend_usd=float(params.get("spend_usd", 3.5)),
+                    impressions=int(params.get("impressions", 120)),
+                    clicks=int(params.get("clicks", 8)),
+                    source="mock",
+                )
+                db.add(ledger)
+            else:
+                ledger.spend_usd = float(params.get("spend_usd", ledger.spend_usd))
+                ledger.impressions = int(params.get("impressions", ledger.impressions or 120))
+                ledger.clicks = int(params.get("clicks", ledger.clicks or 8))
+            synced += 1
+        db.flush()
+        return {"synced_campaigns": synced}
+
+    if action_type == "ADS_PAUSE_CAMPAIGN":
+        campaign_id = uuid.UUID(str(params.get("campaign_id")))
+        ad_campaign = db.scalar(
+            select(AdCampaign).where(AdCampaign.id == campaign_id, AdCampaign.org_id == org_id, AdCampaign.deleted_at.is_(None))
+        )
+        if ad_campaign is None:
+            raise ValueError("ad campaign not found")
+        ad_campaign.status = AdCampaignStatus.PAUSED
+        ad_campaign.last_synced_at = _now()
+        db.flush()
+        return {"ad_campaign_id": str(ad_campaign.id), "status": ad_campaign.status.value}
+
+    if action_type == "RE_CREATE_CHECKLIST_ITEM":
+        from app.services.phase7 import ensure_real_estate_pack
+
+        if not ensure_real_estate_pack(db=db, org_id=org_id):
+            raise ValueError("RE_CREATE_CHECKLIST_ITEM requires real-estate pack")
+        deal_id = uuid.UUID(str(params.get("deal_id")))
+        deal = db.scalar(select(REDeal).where(REDeal.id == deal_id, REDeal.org_id == org_id, REDeal.deleted_at.is_(None)))
+        if deal is None:
+            raise ValueError("deal not found")
+        due_at = None
+        if params.get("due_at"):
+            due_at = datetime.fromisoformat(str(params.get("due_at")).replace("Z", "+00:00"))
+        checklist_item = REChecklistItem(
+            org_id=org_id,
+            deal_id=deal.id,
+            title=str(params.get("title", "Agent-created checklist item")),
+            description=str(params.get("description", "")) or None,
+            due_at=due_at,
+        )
+        db.add(checklist_item)
+        db.flush()
+        return {"re_checklist_item_id": str(checklist_item.id)}
+
+    if action_type == "RE_CREATE_CMA_DRAFT":
+        from app.services.phase7 import ensure_real_estate_pack
+
+        if not ensure_real_estate_pack(db=db, org_id=org_id):
+            raise ValueError("RE_CREATE_CMA_DRAFT requires real-estate pack")
+        report = RECMAReport(
+            org_id=org_id,
+            lead_id=uuid.UUID(str(params.get("lead_id"))) if params.get("lead_id") else None,
+            deal_id=uuid.UUID(str(params.get("deal_id"))) if params.get("deal_id") else None,
+            subject_property_json=params.get("subject_property_json") if isinstance(params.get("subject_property_json"), dict) else {},
+            pricing_json={},
+            policy_warnings_json=[],
+            risk_tier=RiskTier.TIER_1,
+        )
+        db.add(report)
+        db.flush()
+        return {"re_cma_report_id": str(report.id)}
+
+    if action_type == "RE_CREATE_LISTING_PACKAGE":
+        from app.services.phase7 import ensure_real_estate_pack
+
+        if not ensure_real_estate_pack(db=db, org_id=org_id):
+            raise ValueError("RE_CREATE_LISTING_PACKAGE requires real-estate pack")
+        package = REListingPackage(
+            org_id=org_id,
+            deal_id=uuid.UUID(str(params.get("deal_id"))) if params.get("deal_id") else None,
+            property_address_json=params.get("property_address_json") if isinstance(params.get("property_address_json"), dict) else {},
+            description_variants_json={},
+            key_features_json=[str(item) for item in params.get("key_features_json", [])] if isinstance(params.get("key_features_json"), list) else [],
+            open_house_plan_json={},
+            social_campaign_pack_json={},
+            risk_tier=RiskTier.TIER_1,
+            policy_warnings_json=[],
+        )
+        db.add(package)
+        db.flush()
+        return {"re_listing_package_id": str(package.id)}
+
     if action_type == "WEBHOOK":
         row = ConnectorWorkflowRun(
             org_id=org_id,
@@ -1740,9 +1939,14 @@ def agent_run_create(event_id: str | None = None, trigger: str = "event", org_id
             return "no_plans"
 
         created_count = 0
+        snapshot = build_context_snapshot(db=db, org_id=resolved_org_id)
         for plan in plans:
-            safe_plan = enforce_plan_safety(plan=plan, settings_payload=settings_payload)
-            snapshot = build_context_snapshot(db=db, org_id=resolved_org_id)
+            safe_plan = enforce_plan_safety(
+                plan=plan,
+                settings_payload=settings_payload,
+                entitlements_summary=snapshot.entitlements_summary,
+                active_pack_slug=snapshot.active_pack_slug,
+            )
             row = create_agent_run_row(
                 db=db,
                 org_id=resolved_org_id,
@@ -2156,6 +2360,8 @@ def retention_enforcer_tick() -> int:
                 )
         db.commit()
     return soft_deleted
+
+
 
 
 
