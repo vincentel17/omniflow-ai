@@ -43,6 +43,7 @@ from app.models import (  # noqa: E402
     ModelMetadata,
     ModelStatus,
     Org,
+    GlobalAdmin,
     OrgOptimizationSettings,
     OrgSettings,
     OrgSubscription,
@@ -87,9 +88,9 @@ class OrgSpec:
 
 
 ORGS = [
-    OrgSpec("alpha", "QA Standard Alpha Homecare", "home-care", "home_care", 1, True),
-    OrgSpec("beta", "QA Standard Beta RealEstate", "real-estate", "none", 2, True),
-    OrgSpec("gamma", "QA Standard Gamma Control", "generic", "none", 0, False),
+    OrgSpec("alpha", "OmniFlow Home Care Demo", "home-care", "home_care", 1, True),
+    OrgSpec("beta", "OmniFlow Real Estate Demo", "real-estate", "none", 2, True),
+    OrgSpec("gamma", "OmniFlow Generic Demo", "generic", "none", 0, True),
 ]
 
 AGENT_DEFS = [
@@ -154,6 +155,44 @@ def _user_and_memberships(db: Session, org_id: uuid.UUID, org_key: str) -> tuple
     return admin_id, member_id
 
 
+def _seed_preview_users(db: Session, org_id: uuid.UUID) -> None:
+    preview_users = (
+        ("owner", Role.OWNER),
+        ("admin", Role.ADMIN),
+        ("member", Role.MEMBER),
+        ("agent", Role.AGENT),
+    )
+    for role_key, role in preview_users:
+        user_id = _uid("preview-user", role_key)
+        _upsert(
+            db,
+            User,
+            lookup={"id": user_id},
+            defaults={
+                "email": f"preview.{role_key}@qa.omniflow.local",
+                "full_name": f"Preview {role_key.title()}",
+                "external_auth_id": f"auth0|preview-{role_key}",
+            },
+        )
+        _upsert(
+            db,
+            Membership,
+            lookup={"org_id": org_id, "user_id": user_id},
+            defaults={"id": _uid("preview-membership", org_id, role_key), "role": role},
+        )
+        if role_key == "owner":
+            _upsert(
+                db,
+                GlobalAdmin,
+                lookup={"user_id": user_id},
+                defaults={
+                    "id": _uid("preview-global-admin", role_key),
+                    "email": f"preview.{role_key}@qa.omniflow.local",
+                    "active": True,
+                },
+            )
+
+
 def _seed_org_basics(db: Session, spec: OrgSpec) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     org_id = _uid("org", spec.key)
     org = _upsert(
@@ -165,6 +204,7 @@ def _seed_org_basics(db: Session, spec: OrgSpec) -> tuple[uuid.UUID, uuid.UUID, 
     org.name = spec.name
 
     admin_id, member_id = _user_and_memberships(db, org_id, spec.key)
+    _seed_preview_users(db, org_id)
 
     _upsert(
         db,

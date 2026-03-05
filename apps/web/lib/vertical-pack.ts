@@ -1,4 +1,4 @@
-import { getApiBaseUrl, getDevContext } from "./dev-context";
+import { getApiBaseUrl, getRequestDevContext } from "./dev-context";
 
 type CurrentPack = {
   pack_slug: string;
@@ -6,7 +6,7 @@ type CurrentPack = {
 
 export async function getCurrentPackSlug(): Promise<string | null> {
   try {
-    const context = getDevContext();
+    const context = await getRequestDevContext();
     const response = await fetch(`${getApiBaseUrl()}/verticals/current`, {
       headers: {
         "Content-Type": "application/json",

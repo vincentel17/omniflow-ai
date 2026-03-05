@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "../components/app-shell";
 import { ToastProvider } from "../components/ui/toast";
-import { getDevContext } from "../lib/dev-context";
+import { getRequestDevContext } from "../lib/dev-context";
 import { getCurrentPackSlug } from "../lib/vertical-pack";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -23,7 +23,7 @@ function envLabel(): string {
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const context = getDevContext();
+  const context = await getRequestDevContext();
   const packSlug = await getCurrentPackSlug();
   const isRealEstate = packSlug === "real-estate";
 
@@ -37,6 +37,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             envLabel={envLabel()}
             isRealEstate={isRealEstate}
             orgId={context.orgId}
+            orgName={context.orgName}
+            previewOrg={context.previewOrg}
             role={context.role}
           >
             {children}
