@@ -10,8 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.main import app
-from app.models import AuditLog, OAuthToken, Role
+from app.models import AuditLog, ConnectorHealth, ConnectorWorkflowRun, Event, OAuthToken, Org, ReputationReview, ReputationSource, Role
 from app.services.connector_manager import _breaker_state, get_publisher
+from app.services.gbp_reviews import _mock_reviews_page, sync_gbp_reviews_page
 from app.services.live_publishers import map_provider_error, missing_required_scopes
 from app.services.oauth_state import consume_oauth_state, create_oauth_state
 from app.services.token_vault import decrypt_token, encrypt_token
@@ -32,6 +33,17 @@ class _FakeRedis:
 
     def delete(self, key: str) -> int:
         return 1 if self.data.pop(key, None) is not None else 0
+
+
+
+def _patch_worker_send_task(monkeypatch: pytest.MonkeyPatch):
+    from omniflow_worker.main import app as worker_app
+
+    def _send_task(_name: str, args=None, kwargs=None, **_):
+        return {"args": args or [], "kwargs": kwargs or {}}
+
+    monkeypatch.setattr(worker_app, "send_task", _send_task)
+    return worker_app
 
 
 def test_token_encryption_roundtrip() -> None:
@@ -263,3 +275,143 @@ async def test_disconnect_connector_soft_deletes_token_and_writes_audit(
     assert len(audit) == 1
     assert json.loads(json.dumps(audit[0].metadata_json))["provider"] == "google-business-profile"
 
+
+
+
+
+
+
+def test_gbp_mock_reviews_sync_is_deterministic(db_session: Session) -> None:
+    org_id = uuid.UUID("22222222-2222-2222-2222-222222222222")
+    account_ref = "locations/demo-location"
+    db_session.add(Org(id=org_id, name="GBP Contract Org"))
+    db_session.flush()
+    run = ConnectorWorkflowRun(
+        org_id=org_id,
+        provider="google-business-profile",
+        account_ref=account_ref,
+        operation="reviews_sync",
+        idempotency_key="gbp-sync-contract",
+        status="pending",
+        payload_json={},
+        result_json={},
+        max_attempts=3,
+    )
+    db_session.add(run)
+    db_session.flush()
+
+    expected = _mock_reviews_page(account_ref)
+    result = sync_gbp_reviews_page(db_session, org_id=org_id, account_ref=account_ref, run=run, mode="mock")
+    db_session.commit()
+
+    reviews = db_session.scalars(
+        select(ReputationReview).where(
+            ReputationReview.org_id == org_id,
+            ReputationReview.source == ReputationSource.GBP,
+            ReputationReview.deleted_at.is_(None),
+        )
+    ).all()
+    assert result.imported_count == len(expected)
+    assert result.skipped_count == 0
+    assert len(reviews) == len(expected)
+    assert run.status == "completed"
+
+@pytest.mark.integration
+async def test_gbp_sync_pipeline_queues_and_processes_reviews(
+    seeded_context: dict[str, str],
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker_app = _patch_worker_send_task(monkeypatch)
+    admin_headers = dict(seeded_context)
+    admin_headers["X-Omniflow-Role"] = Role.ADMIN.value
+    org_id = uuid.UUID(admin_headers["X-Omniflow-Org-Id"])
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        start = await client.post(
+            "/connectors/google-business-profile/start",
+            headers=admin_headers,
+            json={"account_ref": "locations/demo-location", "display_name": "GBP Demo"},
+        )
+        assert start.status_code == 200
+        state = start.json()["state"]
+
+        callback = await client.post(
+            "/connectors/google-business-profile/callback",
+            headers=admin_headers,
+            json={
+                "state": state,
+                "code": "mock",
+                "account_ref": "locations/demo-location",
+                "display_name": "GBP Demo",
+            },
+        )
+        assert callback.status_code == 200
+        account_id = callback.json()["id"]
+
+        queued = await client.post(f"/connectors/accounts/{account_id}/sync", headers=admin_headers)
+        assert queued.status_code == 200
+        queued_payload = queued.json()
+        assert queued_payload["status"] == "queued"
+
+        result = worker_app.tasks["worker.connectors.gbp.sync_reviews"].run(account_id, queued_payload["idempotency_key"])
+        assert result == "completed"
+
+        diagnostics = await client.get(f"/connectors/accounts/{account_id}/diagnostics", headers=admin_headers)
+        assert diagnostics.status_code == 200
+        diagnostics_payload = diagnostics.json()
+        assert diagnostics_payload["last_ok_at"] is not None
+        assert diagnostics_payload["last_error_msg"] is None
+
+    reviews = db_session.scalars(
+        select(ReputationReview).where(
+            ReputationReview.org_id == org_id,
+            ReputationReview.source == ReputationSource.GBP,
+            ReputationReview.deleted_at.is_(None),
+        )
+    ).all()
+    assert len(reviews) == 2
+    assert all(review.external_id for review in reviews)
+
+    health = db_session.scalar(
+        select(ConnectorHealth).where(
+            ConnectorHealth.org_id == org_id,
+            ConnectorHealth.provider == "google-business-profile",
+            ConnectorHealth.account_ref == "locations/demo-location",
+            ConnectorHealth.deleted_at.is_(None),
+        )
+    )
+    assert health is not None
+    assert health.last_ok_at is not None
+    assert health.last_error_msg is None
+
+    run = db_session.scalar(
+        select(ConnectorWorkflowRun).where(
+            ConnectorWorkflowRun.org_id == org_id,
+            ConnectorWorkflowRun.idempotency_key == queued_payload["idempotency_key"],
+            ConnectorWorkflowRun.deleted_at.is_(None),
+        )
+    )
+    assert run is not None
+    assert run.status == "completed"
+    assert run.result_json["imported_count"] == 2
+
+    audit_actions = db_session.scalars(
+        select(AuditLog.action).where(
+            AuditLog.org_id == org_id,
+            AuditLog.action.in_(["connector.sync_requested", "connector.reviews_synced"]),
+            AuditLog.deleted_at.is_(None),
+        )
+    ).all()
+    assert "connector.sync_requested" in audit_actions
+    assert "connector.reviews_synced" in audit_actions
+
+    event_types = db_session.scalars(
+        select(Event.type).where(
+            Event.org_id == org_id,
+            Event.type.in_(["CONNECTOR_SYNC_REQUESTED", "CONNECTOR_SYNC_SUCCESS"]),
+            Event.deleted_at.is_(None),
+        )
+    ).all()
+    assert "CONNECTOR_SYNC_REQUESTED" in event_types
+    assert "CONNECTOR_SYNC_SUCCESS" in event_types

@@ -335,6 +335,16 @@ class ConnectorDiagnosticsSummaryResponse(BaseModel):
     accounts_linked: int
     last_sync_at: datetime | None
     last_error: str | None
+    gbp_last_sync_at: datetime | None = None
+    gbp_last_error: str | None = None
+
+
+class ConnectorSyncResponse(BaseModel):
+    account_id: uuid.UUID
+    provider: str
+    operation: str
+    status: str
+    idempotency_key: str
 
 
 class ConnectorStartRequest(BaseModel):
@@ -388,6 +398,7 @@ class ConnectorDiagnosticsResponse(BaseModel):
     expires_at: datetime | None
     health_status: str
     breaker_state: str
+    last_ok_at: datetime | None
     last_error_msg: str | None
     last_http_status: int | None
     last_provider_error_code: str | None
@@ -1446,6 +1457,7 @@ class ModelMetadataResponse(BaseModel):
 
 class ModelActivateRequest(BaseModel):
     version: str = Field(min_length=1, max_length=80)
+
 
 
 

@@ -21,6 +21,7 @@ from ..schemas import (
     ConnectorProviderResponse,
     ConnectorStartRequest,
     ConnectorStartResponse,
+    ConnectorSyncResponse,
 )
 from ..services.audit import write_audit_log
 from ..services.billing import ensure_org_active
@@ -28,6 +29,11 @@ from ..services.connector_manager import verify_connector_health
 from ..services.events import write_event
 from ..services.oauth_state import consume_oauth_state, create_oauth_state
 from ..services.org_settings import connector_mode_for_org, provider_enabled_for_org
+
+try:
+    from omniflow_worker.main import app as worker_app  # type: ignore
+except Exception:  # pragma: no cover - broker import remains optional in tests
+    worker_app = None
 from ..services.token_vault import get_token_row, store_tokens
 from ..settings import settings
 from ..tenancy import RequestContext, get_request_context, org_scoped, require_role
@@ -134,6 +140,7 @@ def _diagnostics(
         expires_at=token.expires_at if token is not None else None,
         health_status=health_status,
         breaker_state=breaker_state,
+        last_ok_at=health.last_ok_at if health is not None else None,
         last_error_msg=last_error_msg,
         last_http_status=health.last_http_status if health is not None else None,
         last_provider_error_code=health.last_provider_error_code if health is not None else None,
@@ -199,6 +206,11 @@ def connector_diagnostics_summary(
             present=_env_present(settings.google_client_secret),
         ),
         ConnectorEnvCheckItem(
+            key="PROVIDER_ENABLE_GBP",
+            required_for_live=True,
+            present=settings.provider_enable_gbp,
+        ),
+        ConnectorEnvCheckItem(
             key="OAUTH_REDIRECT_URI",
             required_for_live=True,
             present=_env_present(settings.oauth_redirect_uri),
@@ -234,6 +246,16 @@ def connector_diagnostics_summary(
         .order_by(desc(ConnectorHealth.last_ok_at), desc(ConnectorHealth.updated_at))
         .limit(1)
     )
+    gbp_health = db.scalar(
+        select(ConnectorHealth)
+        .where(
+            ConnectorHealth.org_id == context.current_org_id,
+            ConnectorHealth.provider == "google-business-profile",
+            ConnectorHealth.deleted_at.is_(None),
+        )
+        .order_by(desc(ConnectorHealth.last_ok_at), desc(ConnectorHealth.updated_at))
+        .limit(1)
+    )
 
     mode = connector_mode_for_org(db, context.current_org_id)
     live_ready = all(check.present for check in env_checks if check.required_for_live)
@@ -249,6 +271,8 @@ def connector_diagnostics_summary(
         accounts_linked=linked_accounts,
         last_sync_at=latest_health.last_ok_at if latest_health is not None else None,
         last_error=latest_health.last_error_msg[:200] if latest_health and latest_health.last_error_msg else None,
+        gbp_last_sync_at=gbp_health.last_ok_at if gbp_health is not None else None,
+        gbp_last_error=gbp_health.last_error_msg[:200] if gbp_health and gbp_health.last_error_msg else None,
     )
 
 
@@ -451,7 +475,8 @@ def connector_diagnostics(
         )
     )
 
-    mode_effective = "live" if provider_enabled_for_org(db, context.current_org_id, account.provider, "publish") else "mock"
+    live_enabled = provider_enabled_for_org(db, context.current_org_id, account.provider, "publish") or provider_enabled_for_org(db, context.current_org_id, account.provider, "inbox")
+    mode_effective = "live" if live_enabled else "mock"
     diagnostics = _diagnostics(account=account, health=health, token=token, mode_effective=mode_effective)
 
     missing_scopes = _missing_required_scopes(account.provider, "publish", diagnostics.scopes)
@@ -628,6 +653,56 @@ def run_healthcheck_by_id(
     return run_healthcheck(provider=account.provider, account_ref=account.account_ref, db=db, context=context)
 
 
+@router.post("/accounts/{account_id}/sync", response_model=ConnectorSyncResponse)
+def sync_connector_account(
+    account_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ConnectorSyncResponse:
+    require_role(context, Role.ADMIN)
+    account = db.scalar(
+        org_scoped(
+            select(ConnectorAccount).where(ConnectorAccount.id == account_id, ConnectorAccount.deleted_at.is_(None)),
+            context.current_org_id,
+            ConnectorAccount,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="connector account not found")
+    if account.provider != "google-business-profile":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="manual sync is only available for google-business-profile")
+    if worker_app is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="worker unavailable")
+
+    idempotency_key = f"gbp-sync:{account.id}:{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    worker_app.send_task("worker.connectors.gbp.sync_reviews", args=[str(account.id), idempotency_key])
+    write_audit_log(
+        db=db,
+        context=context,
+        action="connector.sync_requested",
+        target_type="connector_account",
+        target_id=str(account.id),
+        metadata_json={"provider": account.provider, "account_ref": account.account_ref, "operation": "reviews_sync"},
+    )
+    write_event(
+        db=db,
+        org_id=context.current_org_id,
+        source="connectors",
+        channel=account.provider,
+        event_type="CONNECTOR_SYNC_REQUESTED",
+        payload_json={"provider": account.provider, "account_ref": account.account_ref, "operation": "reviews_sync"},
+        actor_id=str(context.current_user_id),
+    )
+    db.commit()
+    return ConnectorSyncResponse(
+        account_id=account.id,
+        provider=account.provider,
+        operation="reviews_sync",
+        status="queued",
+        idempotency_key=idempotency_key,
+    )
+
+
 @router.get("/health", response_model=list[ConnectorHealthResponse])
 def list_health(
     limit: int = Query(default=20, ge=1, le=100),
@@ -647,5 +722,6 @@ def list_health(
         )
     ).all()
     return [_serialize_health(row) for row in rows]
+
 
 

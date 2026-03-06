@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     linkedin_client_secret: str | None = None
     google_client_id: str | None = None
     google_client_secret: str | None = None
+    provider_enable_gbp: bool = False
 
     def oauth_redirect_allowed(self, redirect_uri: str) -> bool:
         allowed = [item.strip() for item in self.allowed_oauth_redirect_uris.split(",") if item.strip()]
@@ -38,9 +39,21 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_non_dev_requirements(self) -> "Settings":
-        if self.app_env == "development":
-            return self
         missing: list[str] = []
+        if self.connector_mode == "live" and self.provider_enable_gbp:
+            if not self.google_client_id:
+                missing.append("GOOGLE_CLIENT_ID")
+            if not self.google_client_secret:
+                missing.append("GOOGLE_CLIENT_SECRET")
+            if not self.oauth_redirect_uri:
+                missing.append("OAUTH_REDIRECT_URI")
+            if not self.token_encryption_key:
+                missing.append("TOKEN_ENCRYPTION_KEY")
+        if self.app_env == "development":
+            if missing:
+                joined = ", ".join(missing)
+                raise ValueError(f"Missing required settings for live GBP: {joined}")
+            return self
         if self.app_env == "production" and not self.app_encryption_key:
             missing.append("APP_ENCRYPTION_KEY")
         if not self.token_encryption_key:

@@ -12,6 +12,7 @@ type Diagnostics = {
   expires_at: string | null;
   health_status: string;
   breaker_state: string;
+  last_ok_at: string | null;
   last_error_msg: string | null;
   last_http_status: number | null;
   last_provider_error_code: string | null;
@@ -51,6 +52,7 @@ export default async function IntegrationDiagnosticsPage({ params }: { params: P
             <p>Breaker: {diagnostics.breaker_state}</p>
             <p>Scopes: {diagnostics.scopes.join(", ") || "none"}</p>
             <p>Expires: {diagnostics.expires_at ?? "n/a"}</p>
+            <p>Last Successful Sync: {diagnostics.last_ok_at ?? "n/a"}</p>
             <p>Last HTTP Status: {diagnostics.last_http_status ?? "n/a"}</p>
             <p>Provider Error: {diagnostics.last_provider_error_code ?? "n/a"}</p>
             <p>Rate Limit Reset: {diagnostics.last_rate_limit_reset_at ?? "n/a"}</p>

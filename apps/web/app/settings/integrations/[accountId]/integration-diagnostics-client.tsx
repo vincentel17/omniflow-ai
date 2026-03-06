@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 
@@ -12,6 +12,20 @@ type Props = {
 
 export function IntegrationDiagnosticsClient({ accountId, provider, accountRef }: Props) {
   const [status, setStatus] = useState<string | null>(null);
+
+  async function syncGbpReviews() {
+    const context = getDevContext();
+    const response = await fetch(`${getApiBaseUrl()}/connectors/accounts/${accountId}/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Omniflow-User-Id": context.userId,
+        "X-Omniflow-Org-Id": context.orgId,
+        "X-Omniflow-Role": context.role
+      }
+    });
+    setStatus(response.ok ? "GBP review sync queued." : `GBP sync failed (${response.status})`);
+  }
 
   async function runHealthcheck() {
     const context = getDevContext();
@@ -59,6 +73,11 @@ export function IntegrationDiagnosticsClient({ accountId, provider, accountRef }
     <section className="mt-6 space-y-3">
       <h2 className="text-xl font-semibold">Actions</h2>
       <div className="flex flex-wrap gap-3">
+        {provider === "google-business-profile" ? (
+          <button className="rounded bg-teal-200 px-3 py-2 text-sm text-slate-900" onClick={syncGbpReviews} type="button">
+            Sync GBP reviews
+          </button>
+        ) : null}
         <button className="rounded bg-slate-200 px-3 py-2 text-sm text-slate-900" onClick={runHealthcheck} type="button">
           Run healthcheck
         </button>

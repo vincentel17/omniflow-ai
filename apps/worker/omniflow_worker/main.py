@@ -151,6 +151,19 @@ def _provider_publish_enabled(db: Session, org_id: uuid.UUID, provider: str) -> 
     return providers_enabled.get(f"{prefix}_publish_enabled") is True
 
 
+def _provider_inbox_enabled(db: Session, org_id: uuid.UUID, provider: str) -> bool:
+    payload = _org_settings_payload(db=db, org_id=org_id)
+    if payload.get("connector_mode") != "live":
+        return False
+    prefix = _PROVIDER_PREFIX.get(provider)
+    if prefix is None:
+        return False
+    providers_enabled = payload.get("providers_enabled_json")
+    if not isinstance(providers_enabled, dict):
+        return False
+    return providers_enabled.get(f"{prefix}_inbox_enabled") is True
+
+
 def _record_connector_failure(db: Session, org_id: uuid.UUID, provider: str, account_ref: str, error_message: str) -> None:
     health = db.scalar(
         select(ConnectorHealth).where(
@@ -807,6 +820,199 @@ def _run_demo_simulator(db: Session) -> int:
             processed += 1
 
     return processed
+
+
+@app.task(name="worker.connectors.gbp.sync_reviews", bind=True, max_retries=3, retry_backoff=True)
+def gbp_sync_reviews(self: Celery, account_id: str, idempotency_key: str) -> str:
+    from app.models import ConnectorAccount, ConnectorDeadLetter, ConnectorWorkflowRun
+    from app.services.gbp_reviews import sync_gbp_reviews_page
+
+    with SessionLocal() as db:
+        account = db.scalar(
+            select(ConnectorAccount).where(
+                ConnectorAccount.id == uuid.UUID(account_id),
+                ConnectorAccount.deleted_at.is_(None),
+            )
+        )
+        if account is None:
+            return "missing"
+
+        run = db.scalar(
+            select(ConnectorWorkflowRun).where(
+                ConnectorWorkflowRun.org_id == account.org_id,
+                ConnectorWorkflowRun.idempotency_key == idempotency_key,
+                ConnectorWorkflowRun.deleted_at.is_(None),
+            )
+        )
+        if run is None:
+            run = ConnectorWorkflowRun(
+                org_id=account.org_id,
+                provider=account.provider,
+                account_ref=account.account_ref,
+                operation="reviews_sync",
+                idempotency_key=idempotency_key,
+                status="pending",
+                payload_json={"account_id": str(account.id), "mode": _org_connector_mode(db=db, org_id=account.org_id)},
+                result_json={},
+                max_attempts=3,
+            )
+            db.add(run)
+            db.flush()
+        elif run.status == "completed":
+            return "already_completed"
+
+        if account.provider != "google-business-profile":
+            run.status = "failed"
+            run.last_error = "unsupported provider"
+            db.commit()
+            return "unsupported_provider"
+        if not _org_is_active(db=db, org_id=account.org_id):
+            run.status = "failed"
+            run.last_error = "ORG_NOT_ACTIVE"
+            db.commit()
+            return "org_not_active"
+        if _connector_breaker_open(db=db, org_id=account.org_id, provider=account.provider, account_ref=account.account_ref):
+            run.status = "failed"
+            run.last_error = "BREAKER_TRIPPED"
+            run.result_json = {"reason": "BREAKER_TRIPPED"}
+            _write_system_event(
+                db=db,
+                org_id=account.org_id,
+                channel=account.provider,
+                event_type="CONNECTOR_SYNC_FAILED",
+                content_id=account.id,
+                payload={"account_id": str(account.id), "reason": "BREAKER_TRIPPED"},
+            )
+            _write_system_audit(
+                db=db,
+                org_id=account.org_id,
+                action="connector.sync_blocked",
+                target_type="connector_account",
+                target_id=str(account.id),
+                risk_tier=RiskTier.TIER_1,
+                metadata={"reason": "BREAKER_TRIPPED", "provider": account.provider},
+            )
+            db.commit()
+            return "breaker_tripped"
+
+        env_live_enabled = os.getenv("PROVIDER_ENABLE_GBP", "").lower() in {"1", "true", "yes"}
+        mode = "live" if (_org_connector_mode(db=db, org_id=account.org_id) == "live" and _provider_inbox_enabled(db=db, org_id=account.org_id, provider=account.provider) and env_live_enabled) else "mock"
+
+        _write_system_event(
+            db=db,
+            org_id=account.org_id,
+            channel=account.provider,
+            event_type="CONNECTOR_SYNC_ATTEMPT",
+            content_id=account.id,
+            payload={"account_id": str(account.id), "operation": "reviews_sync", "mode": mode},
+        )
+
+        try:
+            result = sync_gbp_reviews_page(
+                db,
+                org_id=account.org_id,
+                account_ref=account.account_ref,
+                run=run,
+                mode=mode,
+            )
+            _write_system_event(
+                db=db,
+                org_id=account.org_id,
+                channel=account.provider,
+                event_type="CONNECTOR_SYNC_SUCCESS",
+                content_id=account.id,
+                payload={
+                    "account_id": str(account.id),
+                    "operation": "reviews_sync",
+                    "mode": mode,
+                    "imported_count": result.imported_count,
+                    "skipped_count": result.skipped_count,
+                },
+            )
+            _write_system_audit(
+                db=db,
+                org_id=account.org_id,
+                action="connector.reviews_synced",
+                target_type="connector_account",
+                target_id=str(account.id),
+                risk_tier=RiskTier.TIER_1,
+                metadata={
+                    "provider": account.provider,
+                    "operation": "reviews_sync",
+                    "mode": mode,
+                    "imported_count": result.imported_count,
+                    "skipped_count": result.skipped_count,
+                },
+            )
+            db.commit()
+            return "completed"
+        except ConnectorError as exc:
+            sanitized = _sanitize_workflow_error(exc)
+            run.last_error = sanitized
+            _record_connector_failure(
+                db=db,
+                org_id=account.org_id,
+                provider=account.provider,
+                account_ref=account.account_ref,
+                error_message=sanitized,
+            )
+            if exc.category in {"auth", "reauth_required"}:
+                account.status = "reauth_required"
+                _write_system_event(
+                    db=db,
+                    org_id=account.org_id,
+                    channel=account.provider,
+                    event_type="CONNECTOR_REAUTH_REQUIRED",
+                    content_id=account.id,
+                    payload={"account_id": str(account.id), "provider": account.provider},
+                )
+
+            should_retry = exc.category in {"rate_limit", "network"} and self.request.retries < max(0, int(run.max_attempts or 3) - 1)
+            if should_retry:
+                run.status = "pending"
+                db.commit()
+                raise self.retry(exc=exc)
+
+            dead_letter = db.scalar(
+                select(ConnectorDeadLetter).where(
+                    ConnectorDeadLetter.org_id == account.org_id,
+                    ConnectorDeadLetter.idempotency_key == idempotency_key,
+                    ConnectorDeadLetter.deleted_at.is_(None),
+                )
+            )
+            if dead_letter is None:
+                db.add(
+                    ConnectorDeadLetter(
+                        org_id=account.org_id,
+                        provider=account.provider,
+                        account_ref=account.account_ref,
+                        operation="reviews_sync",
+                        idempotency_key=idempotency_key,
+                        attempt_count=int(run.attempt_count or 0),
+                        reason=sanitized,
+                        payload_json={"account_id": str(account.id), "category": exc.category},
+                    )
+                )
+            run.dead_lettered_at = _now()
+            _write_system_event(
+                db=db,
+                org_id=account.org_id,
+                channel=account.provider,
+                event_type="CONNECTOR_SYNC_FAILED",
+                content_id=account.id,
+                payload={"account_id": str(account.id), "error_category": exc.category},
+            )
+            _write_system_audit(
+                db=db,
+                org_id=account.org_id,
+                action="connector.sync_failed",
+                target_type="connector_account",
+                target_id=str(account.id),
+                risk_tier=RiskTier.TIER_1,
+                metadata={"provider": account.provider, "operation": "reviews_sync", "error_category": exc.category},
+            )
+            db.commit()
+            return "failed"
 
 
 @app.task(name="worker.demo.simulator_tick")
