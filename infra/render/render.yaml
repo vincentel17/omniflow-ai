@@ -1,0 +1,177 @@
+services:
+  - type: keyvalue
+    name: omniflow-redis
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+  - type: web
+    name: omniflow-api
+    runtime: python
+    plan: starter
+    rootDir: .
+    buildCommand: python -m pip install --upgrade pip && pip install -e apps/api
+    preDeployCommand: bash scripts/render-migrate.sh
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENV
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omniflow-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: omniflow-redis
+          property: connectionString
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: APP_ENCRYPTION_KEY
+        sync: false
+      - key: CONNECTOR_MODE
+        value: mock
+      - key: AI_MODE
+        value: mock
+      - key: DEV_AUTH_BYPASS
+        value: false
+      - key: OAUTH_REDIRECT_URI
+        sync: false
+      - key: ALLOWED_OAUTH_REDIRECT_URIS
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  - type: worker
+    name: omniflow-worker
+    runtime: python
+    plan: starter
+    rootDir: .
+    buildCommand: python -m pip install --upgrade pip && pip install -e apps/api -e apps/worker
+    startCommand: python -m celery -A omniflow_worker.main.app worker --loglevel=INFO
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENV
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omniflow-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: omniflow-redis
+          property: connectionString
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: APP_ENCRYPTION_KEY
+        sync: false
+      - key: CONNECTOR_MODE
+        value: mock
+      - key: AI_MODE
+        value: mock
+      - key: LOG_LEVEL
+        value: info
+
+  - type: web
+    name: omniflow-web
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: corepack enable && corepack prepare pnpm@9.12.2 --activate && pnpm install --frozen-lockfile && pnpm --filter @omniflow/schemas build && pnpm --filter @omniflow/web build
+    startCommand: node apps/web/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: API_BASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_AI_MODE
+        value: mock
+      - key: NEXT_PUBLIC_CONNECTOR_MODE
+        value: mock
+      - key: NEXT_PUBLIC_DEMO_SIMULATOR
+        value: "false"
+      - key: NEXT_PUBLIC_PREVIEW_ORG
+        value: beta
+      - key: NEXT_PUBLIC_PREVIEW_ROLE
+        value: owner
+
+  - type: cron
+    name: omniflow-seed-demo
+    runtime: python
+    plan: starter
+    rootDir: .
+    schedule: "0 6 * * *"
+    buildCommand: python -m pip install --upgrade pip && pip install -e apps/api
+    startCommand: bash -lc 'if [ "${APP_ENV:-}" != "staging" ] || [ "${ALLOW_QA_SEED:-false}" != "true" ]; then echo "skip seed-demo"; exit 0; fi; python ./scripts/seed/qa_standard.py'
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENV
+        sync: false
+      - key: ALLOW_QA_SEED
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omniflow-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: omniflow-redis
+          property: connectionString
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: CONNECTOR_MODE
+        value: mock
+      - key: AI_MODE
+        value: mock
+
+  - type: cron
+    name: omniflow-demo-simulator-tick
+    runtime: python
+    plan: starter
+    rootDir: .
+    schedule: "*/15 * * * *"
+    buildCommand: python -m pip install --upgrade pip && pip install -e apps/api -e apps/worker
+    startCommand: bash -lc 'if [ "${APP_ENV:-}" != "staging" ] || [ "${DEMO_SIMULATOR:-false}" != "true" ]; then echo "skip demo simulator"; exit 0; fi; python ./scripts/qa/demo_simulator_tick.py'
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENV
+        sync: false
+      - key: DEMO_SIMULATOR
+        value: "false"
+      - key: DEMO_SIM_SEED
+        value: "1234"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omniflow-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: omniflow-redis
+          property: connectionString
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: CONNECTOR_MODE
+        value: mock
+      - key: AI_MODE
+        value: mock
+
+databases:
+  - name: omniflow-postgres
+    databaseName: omniflow
+    user: omniflow
+    postgresMajorVersion: "16"

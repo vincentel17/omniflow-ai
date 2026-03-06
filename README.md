@@ -142,3 +142,29 @@ See `docs/connectors.md` for architecture and extension guidance.
 2. In `/settings/integrations`, review Connector Diagnostics env checklist.
 3. Required live env vars: `META_APP_ID`, `META_APP_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URI`, `TOKEN_ENCRYPTION_KEY`.
 4. Switch connector mode to `live` only after env requirements are present and use sandbox/test accounts.
+
+## Run Demo Locally
+
+1. `docker compose up -d --build`
+2. `make migrate`
+3. `ALLOW_QA_SEED=true make seed-demo`
+4. Optional live mock activity:
+   - `DEMO_SIMULATOR=true DEMO_SIM_SEED=1234 make simulator-demo-tick`
+5. Smoke check:
+   - `make smoke`
+
+## E2E Verified Flows
+
+The mock-mode MVP is verified for:
+
+- readiness and health checks
+- campaign plan -> content draft -> approval -> schedule publish
+- inbox, leads, presence, SEO, reputation, analytics, audit, billing, agents
+- preview demo org switching
+
+To run the web E2E suite:
+
+1. Ensure the stack is up and seeded.
+2. Run `pnpm run test-e2e`
+
+For Render staging and production deployment steps, see `docs/render-deploy.md`.
