@@ -6,6 +6,7 @@ export type ApiError = {
   status: number;
   message: string;
   path: string;
+  requestId?: string;
 };
 
 type FetchOptions = {
@@ -28,20 +29,30 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   });
 
   if (!response.ok) {
+    const requestId = response.headers.get("X-Request-Id") ?? undefined;
     let message = `Request failed (${response.status})`;
     try {
-      const payload = (await response.json()) as { detail?: string };
+      const payload = (await response.json()) as { detail?: string; request_id?: string };
       if (payload.detail) {
         message = payload.detail;
       }
-    } catch {
-      // Ignore parse failures and keep generic message.
+      throw <ApiError>{
+        status: response.status,
+        message,
+        path,
+        requestId: payload.request_id ?? requestId
+      };
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "status" in error) {
+        throw error;
+      }
     }
 
     throw <ApiError>{
       status: response.status,
       message,
-      path
+      path,
+      requestId
     };
   }
 

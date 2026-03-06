@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
 
@@ -17,8 +17,44 @@ type PublishJob = {
 
 type Props = { jobs: PublishJob[] };
 
+async function apiGet(path: string): Promise<Response> {
+  const context = getDevContext();
+  return fetch(`${getApiBaseUrl()}${path}`, {
+    headers: {
+      "X-Omniflow-User-Id": context.userId,
+      "X-Omniflow-Org-Id": context.orgId,
+      "X-Omniflow-Role": context.role
+    },
+    cache: "no-store"
+  });
+}
+
 export function PublishJobsTable({ jobs }: Props) {
+  const [items, setItems] = useState(jobs);
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (items.length > 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void apiGet("/publish/jobs?limit=50&offset=0")
+      .then(async (response) => {
+        if (!response.ok || cancelled) {
+          return;
+        }
+        const payload = (await response.json()) as PublishJob[];
+        if (!cancelled) {
+          setItems(payload);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items.length]);
 
   async function cancel(jobId: string) {
     const context = getDevContext();
@@ -34,16 +70,16 @@ export function PublishJobsTable({ jobs }: Props) {
       setStatus(`Cancel failed (${response.status})`);
       return;
     }
+    setItems((current) => current.map((job) => (job.id === jobId ? { ...job, status: "canceled" } : job)));
     setStatus("Job canceled.");
-    window.location.reload();
   }
 
   return (
     <div className="mt-6 space-y-4">
       {status ? <p className="text-sm text-slate-300" data-testid="publish-status-message">{status}</p> : null}
-      <ul className="space-y-3">
-        {jobs.map((job) => (
-          <li className="rounded border border-slate-800 p-3" key={job.id}>
+      <ul className="space-y-3" data-testid="publish-jobs-list">
+        {items.map((job) => (
+          <li className="rounded border border-slate-800 p-3" data-testid={`publish-job-row-${job.id}`} key={job.id}>
             <p className="font-medium">
               {job.provider}/{job.account_ref} | {job.status}
             </p>

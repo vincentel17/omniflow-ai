@@ -85,6 +85,79 @@ def test_scheduler_tick_skips_when_auto_posting_disabled(monkeypatch) -> None:
     assert delay_counter.calls == 0
 
 
+def test_publish_job_execute_marks_job_succeeded(monkeypatch) -> None:
+    org_id = uuid.uuid4()
+    content_id = uuid.uuid4()
+    job_id = uuid.uuid4()
+    content = SimpleNamespace(
+        id=content_id,
+        org_id=org_id,
+        channel="linkedin",
+        risk_tier=1,
+        text_rendered="Truth pass publish",
+        media_refs_json=[],
+        link_url="https://example.test/post",
+        tags_json=["truth-pass"],
+        status=worker_main.ContentItemStatus.APPROVED,
+    )
+    job = SimpleNamespace(
+        id=job_id,
+        org_id=org_id,
+        content_item_id=content_id,
+        provider="linkedin",
+        account_ref="acct-demo",
+        status=worker_main.PublishJobStatus.QUEUED,
+        attempts=0,
+        external_id=None,
+        published_at=None,
+        last_error=None,
+    )
+
+    class _DummySession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.commits = 0
+
+        def scalar(self, stmt):  # noqa: ANN001
+            self.calls += 1
+            return job if self.calls == 1 else content
+
+        def flush(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            self.commits += 1
+
+    class _Publisher:
+        def publish_post(self, payload):  # noqa: ANN001
+            return {"external_id": "live-linkedin-123"}
+
+    db = _DummySession()
+    monkeypatch.setattr(worker_main, "SessionLocal", lambda: db)
+    monkeypatch.setattr(worker_main, "_org_is_active", lambda db, org_id: True)
+    monkeypatch.setattr(worker_main, "_org_feature_enabled", lambda db, org_id, key, fallback: True)
+    monkeypatch.setattr(worker_main, "_provider_publish_enabled", lambda db, org_id, provider: True)
+    monkeypatch.setattr(worker_main, "_connector_breaker_open", lambda db, org_id, provider, account_ref: False)
+    monkeypatch.setattr(worker_main, "_write_system_event", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "_write_system_audit", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "get_publisher", lambda provider, org_id, account_ref, db: _Publisher())
+
+    result = worker_main.publish_job_execute.run(str(job_id))
+
+    assert result == "succeeded"
+    assert job.status == worker_main.PublishJobStatus.SUCCEEDED
+    assert content.status == worker_main.ContentItemStatus.PUBLISHED
+    assert job.external_id == "live-linkedin-123"
+    assert job.attempts == 1
+    assert db.commits == 1
+
+
 def test_connector_breaker_allows_half_open_after_cooldown() -> None:
     now = worker_main._now()
     account = SimpleNamespace(status="circuit_open")

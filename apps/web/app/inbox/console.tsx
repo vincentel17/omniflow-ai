@@ -170,7 +170,12 @@ export function InboxConsole({ initialThreads }: Props) {
         <ul className="mt-4 space-y-2">
           {threads.map((thread) => (
             <li className="rounded border border-slate-800 p-3" key={thread.id}>
-              <button className="w-full text-left" onClick={() => loadMessages(thread.id)} type="button">
+              <button
+                className="w-full text-left"
+                data-testid={threads[0]?.id === thread.id ? "tour-inbox-open-thread" : undefined}
+                onClick={() => loadMessages(thread.id)}
+                type="button"
+              >
                 <p className="font-medium">
                   {thread.provider} | {thread.status}
                 </p>
@@ -190,7 +195,7 @@ export function InboxConsole({ initialThreads }: Props) {
               <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-suggest-reply" onClick={suggestReply} type="button">
                 Suggest Reply
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-create-lead" onClick={createLead} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="tour-lead-create" onClick={createLead} type="button">
                 Create Lead
               </button>
               <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={closeThread} type="button">
@@ -203,7 +208,7 @@ export function InboxConsole({ initialThreads }: Props) {
               placeholder="Draft reply text..."
               value={draftText}
             />
-            <button className="mt-2 rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="inbox-save-draft" onClick={draftReply} type="button">
+            <button className="mt-2 rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="tour-inbox-send-reply" onClick={draftReply} type="button">
               Save Draft
             </button>
             <ul className="mt-4 space-y-2">

@@ -19,7 +19,7 @@ async function getAuditLogs(): Promise<AuditRow[]> {
 export default async function AuditPage() {
   const entries = await getAuditLogs();
   return (
-    <main className="page-shell">
+    <main className="page-shell" data-testid="tour-audit-open">
       <h1 className="text-3xl font-semibold">Audit Log</h1>
       <ul className="mt-6 space-y-2">
         {entries.map((entry) => (

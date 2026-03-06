@@ -131,9 +131,9 @@ See `docs/connectors.md` for architecture and extension guidance.
 
 1. `docker compose up -d --build`
 2. `pnpm run migrate`
-3. `ALLOW_QA_SEED=true pnpm run seed:demo`
-4. Optional clean reset: `ALLOW_QA_RESET=true ALLOW_QA_SEED=true pnpm run reset:demo`
-5. Optional deterministic simulator tick: `DEMO_SIMULATOR=true DEMO_SIM_SEED=1234 pnpm run demo:simulator:tick`
+3. `make seed-demo` (or `ALLOW_QA_SEED=true pnpm run seed:demo`)
+4. Optional clean reset: `make reset-demo` (or `ALLOW_QA_RESET=true ALLOW_QA_SEED=true pnpm run reset:demo`)
+5. Optional deterministic simulator tick: `DEMO_SIMULATOR=true DEMO_SIM_SEED=1234 make simulator-demo-tick`
 6. E2E run: `pnpm --filter @omniflow/web test:e2e`
 
 ### Live Connector Enablement (Safe Minimum)

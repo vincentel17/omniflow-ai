@@ -30,7 +30,7 @@ export default async function AnalyticsOverviewPage() {
   const data = await apiFetch<OverviewResponse>("/analytics/overview").catch(() => fallbackOverview);
 
   return (
-    <main className="page-shell">
+    <main className="page-shell" data-testid="tour-analytics-open">
       <h1 className="text-3xl font-semibold">Analytics Overview</h1>
       <p className="mt-2 text-slate-400">Attribution and operational ROI from unified internal events.</p>
       <nav className="mt-4 flex flex-wrap gap-4 text-sm text-slate-300">

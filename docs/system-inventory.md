@@ -1,0 +1,375 @@
+# System Inventory
+
+Generated from repository state during the Phase 1-16 truth pass. This file is evidence-first and only lists routes, jobs, tables, packs, and flags observable in the repo.
+
+## Web Route Map
+- `/`
+- `/admin`
+- `/admin/verticals`
+- `/ads`
+- `/ads/campaigns`
+- `/ads/creatives`
+- `/ads/experiments`
+- `/analytics`
+- `/analytics/content`
+- `/analytics/funnel`
+- `/analytics/presence`
+- `/analytics/sla`
+- `/analytics/workload`
+- `/approvals`
+- `/audit`
+- `/automations/agents`
+- `/automations/agents/runs`
+- `/automations/agents/runs/[id]`
+- `/automations/runs`
+- `/automations/workflows`
+- `/billing`
+- `/campaigns`
+- `/compliance`
+- `/content`
+- `/dashboard`
+- `/events`
+- `/inbox`
+- `/leads`
+- `/onboarding`
+- `/optimization`
+- `/optimization/ads`
+- `/optimization/campaigns`
+- `/optimization/leads`
+- `/optimization/workflows`
+- `/presence`
+- `/presence/audits`
+- `/publish/jobs`
+- `/real-estate/cma`
+- `/real-estate/deals`
+- `/real-estate/deals/[id]`
+- `/real-estate/listings`
+- `/reputation`
+- `/seo`
+- `/settings`
+- `/settings/brand`
+- `/settings/integrations`
+- `/settings/integrations/[accountId]`
+- `/settings/integrations/diagnostics`
+- `/settings/sla`
+- `/settings/vertical`
+- `/settings/verticals`
+
+## API Routes
+- `GET /admin/billing/overview`
+- `GET /admin/orgs`
+- `GET /admin/orgs/{org_id}`
+- `GET /admin/vertical-performance`
+- `GET /admin/verticals`
+- `GET /ads/accounts`
+- `GET /ads/campaigns`
+- `GET /ads/campaigns/{campaign_id}`
+- `GET /ads/creatives`
+- `GET /ads/experiments`
+- `GET /ads/metrics`
+- `GET /ads/settings`
+- `GET /agents/context`
+- `GET /agents/definitions`
+- `GET /agents/definitions/{agent_name}`
+- `GET /agents/runs`
+- `GET /agents/runs/{run_id}`
+- `GET /analytics/content`
+- `GET /analytics/funnel`
+- `GET /analytics/overview`
+- `GET /analytics/presence`
+- `GET /analytics/sla`
+- `GET /analytics/workload`
+- `GET /approvals`
+- `GET /audit`
+- `GET /billing/plans`
+- `GET /billing/status`
+- `GET /billing/subscription`
+- `GET /billing/usage/{metric_type}`
+- `GET /brand/profile`
+- `GET /campaigns`
+- `GET /campaigns/{campaign_id}`
+- `GET /compliance/dsar`
+- `GET /compliance/evidence-bundle`
+- `GET /compliance/mode`
+- `GET /compliance/rbac-matrix`
+- `GET /compliance/retention`
+- `GET /connectors/accounts`
+- `GET /connectors/accounts/{account_id}/diagnostics`
+- `GET /connectors/diagnostics/summary`
+- `GET /connectors/health`
+- `GET /connectors/providers`
+- `GET /connectors/{provider}/callback`
+- `GET /connectors/{provider}/start`
+- `GET /content`
+- `GET /content/{content_id}`
+- `GET /events`
+- `GET /health`
+- `GET /healthz`
+- `GET /healthz/db`
+- `GET /inbox/threads`
+- `GET /inbox/threads/{thread_id}`
+- `GET /inbox/threads/{thread_id}/messages`
+- `GET /leads`
+- `GET /leads/{lead_id}`
+- `GET /leads/{lead_id}/nurture/tasks`
+- `GET /links`
+- `GET /onboarding/status`
+- `GET /ops/settings`
+- `GET /optimization/ads`
+- `GET /optimization/campaigns`
+- `GET /optimization/leads`
+- `GET /optimization/models`
+- `GET /optimization/next-best-action/{entity_type}/{entity_id}`
+- `GET /optimization/nurture/recommendations`
+- `GET /optimization/settings`
+- `GET /optimization/workflow/recommendations`
+- `GET /optimization/workflows`
+- `GET /orgs`
+- `GET /orgs/memberships`
+- `GET /orgs/users/{user_id}`
+- `GET /presence`
+- `GET /presence/audits`
+- `GET /presence/audits/{audit_run_id}`
+- `GET /presence/findings`
+- `GET /presence/tasks`
+- `GET /publish/jobs`
+- `GET /r/{code}`
+- `GET /re/cma/reports`
+- `GET /re/cma/reports/{report_id}`
+- `GET /re/deals`
+- `GET /re/deals/{deal_id}`
+- `GET /re/deals/{deal_id}/checklist-items`
+- `GET /re/deals/{deal_id}/communications`
+- `GET /re/deals/{deal_id}/documents`
+- `GET /re/listings/packages`
+- `GET /re/listings/packages/{listing_id}`
+- `GET /ready`
+- `GET /reputation/campaigns`
+- `GET /reputation/reviews`
+- `GET /seo/plan`
+- `GET /seo/work-items`
+- `GET /sla/config`
+- `GET /verticals/available`
+- `GET /verticals/current`
+- `GET /verticals/packs`
+- `GET /verticals/{slug}/manifest`
+- `GET /workflows`
+- `GET /workflows/actions`
+- `GET /workflows/actions/{action_run_id}`
+- `GET /workflows/runs`
+- `GET /workflows/runs/{run_id}`
+- `GET /workflows/{workflow_id}`
+- `PATCH /ads/campaigns/{campaign_id}`
+- `PATCH /ads/settings`
+- `PATCH /brand/profile`
+- `PATCH /compliance/retention`
+- `PATCH /leads/{lead_id}`
+- `PATCH /leads/{lead_id}/nurture/tasks/{task_id}`
+- `PATCH /ops/settings`
+- `PATCH /workflows/{workflow_id}`
+- `POST /admin/orgs/{org_id}/impersonate`
+- `POST /admin/orgs/{org_id}/reactivate`
+- `POST /admin/orgs/{org_id}/suspend`
+- `POST /ads/accounts`
+- `POST /ads/campaigns`
+- `POST /ads/campaigns/{campaign_id}/activate`
+- `POST /ads/campaigns/{campaign_id}/creatives`
+- `POST /ads/campaigns/{campaign_id}/experiments`
+- `POST /ads/campaigns/{campaign_id}/pause`
+- `POST /ads/campaigns/{campaign_id}/request-activation`
+- `POST /ads/creatives/{creative_id}/approve`
+- `POST /ads/experiments/{experiment_id}/start`
+- `POST /ads/experiments/{experiment_id}/stop`
+- `POST /ads/metrics/sync`
+- `POST /agents/run`
+- `POST /agents/runs/{run_id}/execute`
+- `POST /approvals/{approval_id}/approve`
+- `POST /approvals/{approval_id}/reject`
+- `POST /billing/cancel`
+- `POST /billing/change-plan`
+- `POST /billing/checkout`
+- `POST /billing/webhook`
+- `POST /campaigns/plan`
+- `POST /campaigns/{campaign_id}/approve`
+- `POST /campaigns/{campaign_id}/generate-content`
+- `POST /compliance/dsar`
+- `POST /compliance/dsar/{request_id}/process`
+- `POST /compliance/rbac-audit`
+- `POST /connectors/accounts/{account_id}/breaker/reset`
+- `POST /connectors/accounts/{account_id}/disconnect`
+- `POST /connectors/accounts/{account_id}/healthcheck`
+- `POST /connectors/accounts/{account_id}/revoke`
+- `POST /connectors/{provider}/{account_ref}/healthcheck`
+- `POST /content/{content_id}/approve`
+- `POST /content/{content_id}/schedule`
+- `POST /inbox/ingest/mock`
+- `POST /inbox/threads/{thread_id}/assign`
+- `POST /inbox/threads/{thread_id}/close`
+- `POST /inbox/threads/{thread_id}/draft-reply`
+- `POST /inbox/threads/{thread_id}/suggest-reply`
+- `POST /leads/from-thread/{thread_id}`
+- `POST /leads/{lead_id}/nurture/apply`
+- `POST /leads/{lead_id}/nurture/suggest`
+- `POST /leads/{lead_id}/route`
+- `POST /leads/{lead_id}/score`
+- `POST /links`
+- `POST /links/{link_id}/attach-lead`
+- `POST /onboarding/start`
+- `POST /onboarding/step/{step_id}/complete`
+- `POST /optimization/lead-score/{lead_id}`
+- `POST /optimization/models/{name}/activate`
+- `POST /presence/audits/run`
+- `POST /presence/findings/{finding_id}`
+- `POST /publish/jobs/{job_id}/cancel`
+- `POST /re/cma/reports/{report_id}/comps/import`
+- `POST /re/cma/reports/{report_id}/export`
+- `POST /re/cma/reports/{report_id}/generate`
+- `POST /re/deals/{deal_id}/checklist-items/{item_id}/complete`
+- `POST /re/deals/{deal_id}/checklists/apply-template`
+- `POST /re/deals/{deal_id}/communications/log`
+- `POST /re/deals/{deal_id}/documents/request`
+- `POST /re/deals/{deal_id}/timeline/auto`
+- `POST /re/listings/packages/{listing_id}/approve`
+- `POST /re/listings/packages/{listing_id}/generate`
+- `POST /re/listings/packages/{listing_id}/push-to-content-queue`
+- `POST /reputation/campaigns/{campaign_id}/start`
+- `POST /reputation/reviews/import`
+- `POST /reputation/reviews/{review_id}/draft-response`
+- `POST /seo/work-items/{id}/approve`
+- `POST /seo/work-items/{id}/export`
+- `POST /seo/work-items/{id}/generate`
+- `POST /verticals/select`
+- `POST /workflows`
+- `POST /workflows/{workflow_id}/test`
+
+## Worker Jobs
+- `worker.health.ping` -> `def ping() -> str:` (max_retries=default, retry_backoff=false)
+- `worker.optimization.lead_model_train_tick` -> `def lead_model_train_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.publish.execute` -> `def publish_job_execute(self: Celery, publish_job_id: str) -> str:` (max_retries=3, retry_backoff=true)
+- `worker.publish.scheduler_tick` -> `def scheduler_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.demo.simulator_tick` -> `def demo_simulator_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.inbox.ingest_poll` -> `def inbox_ingest_poll(provider: str = "meta", account_ref: str = "acct-main") -> str:` (max_retries=default, retry_backoff=false)
+- `worker.sla.monitor_tick` -> `def sla_monitor_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.presence.audit_tick` -> `def presence_audit_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.reputation.sla_tick` -> `def reputation_sla_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.workflow.evaluate` -> `def workflow_evaluate(event_id: str) -> str:` (max_retries=default, retry_backoff=false)
+- `worker.workflow.action.execute` -> `def workflow_action_execute(self: Celery, action_run_id: str) -> str:` (max_retries=3, retry_backoff=true)
+- `worker.workflow.approval.apply` -> `def workflow_approval_apply(approval_id: str) -> str:` (max_retries=default, retry_backoff=false)
+- `worker.agents.run_create` -> `def agent_run_create(event_id: str | None = None, trigger: str = "event", org_id: str | None = None) -> str:` (max_retries=default, retry_backoff=false)
+- `worker.agents.execute` -> `def agent_execute(agent_run_id: str) -> str:` (max_retries=default, retry_backoff=false)
+- `worker.agents.schedule_tick` -> `def agent_schedule_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.agents.metrics_tick` -> `def agent_metrics_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.billing.status_sync_tick` -> `def billing_status_sync_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.usage.aggregator_tick` -> `def usage_aggregator_tick() -> int:` (max_retries=default, retry_backoff=false)
+- `worker.retention.enforcer_tick` -> `def retention_enforcer_tick() -> int:` (max_retries=default, retry_backoff=false)
+
+## DB Schema Evidence
+### Alembic Migrations
+- `0001_phase0_init.py`
+- `0002_phase1_core_foundations.py`
+- `0003_phase3_growth_loop_core.py`
+- `0004_phase2_connector_framework.py`
+- `0005_phase4_inbox_lead_engine.py`
+- `0006_phase5_presence_seo_reputation.py`
+- `0007_phase6_attrib_analytics.py`
+- `0008_phase7_real_estate_pack.py`
+- `0009_phase8_ops_onboarding.py`
+- `0010_phase9_conn_health.py`
+- `0011_phase10_workflow_engine.py`
+- `0012_phase12_compliance_governance.py`
+- `0013_phase12_softdelete_column_backfill.py`
+- `0014_phase13_billing_subscriptions.py`
+- `0015_phase14_optimization_engine.py`
+- `0016_phase15_vertical_pack_registry.py`
+- `0017_phase16_agents.py`
+- `0018_p16_approval_enum.py`
+
+### Key Tables
+- `audit_logs`
+- `events`
+- `orgs`
+- `memberships`
+- `users`
+- `onboarding_sessions`
+- `vertical_pack_registry`
+- `workflow_definitions`
+- `workflow_runs`
+- `workflow_action_runs`
+- `approvals`
+- `campaign_plans`
+- `content_items`
+- `publish_jobs`
+- `inbox_threads`
+- `inbox_messages`
+- `leads`
+- `lead_scores`
+- `lead_assignments`
+- `nurture_tasks`
+- `presence_audit_runs`
+- `presence_findings`
+- `presence_tasks`
+- `seo_work_items`
+- `reputation_reviews`
+- `reputation_request_campaigns`
+- `link_tracking`
+- `link_clicks`
+- `connector_accounts`
+- `connector_health`
+- `connector_dead_letters`
+- `subscription_plans`
+- `org_subscriptions`
+- `usage_metrics`
+- `ad_accounts`
+- `ad_campaigns`
+- `ad_creatives`
+- `ad_experiments`
+- `ad_spend_ledger`
+- `data_retention_policies`
+- `dsar_requests`
+- `permission_audit_reports`
+- `predictive_lead_scores`
+- `posting_optimizations`
+- `ad_budget_recommendations`
+- `model_metadata`
+- `agent_definitions`
+- `agent_runs`
+- `agent_metrics`
+- `re_deals`
+- `re_checklist_items`
+- `re_documents`
+- `re_communications`
+- `re_cma_reports`
+- `re_listing_packages`
+
+## Vertical Packs
+- `generic` `2.0.0` features={"ads": true, "compliance": true, "optimization": true, "pipelines": true, "seo": true, "workflows": true}
+- `home-care` `2.0.0` features={"ads": false, "compliance": true, "optimization": true, "pipelines": true, "seo": true, "workflows": true}
+- `real-estate` `2.0.0` features={"ads": true, "compliance": true, "optimization": true, "pipelines": true, "seo": true, "workflows": true}
+
+## Key Feature Flags / Env Vars
+- `CONNECTOR_MODE`
+- `AI_MODE`
+- `ADS_MODE`
+- `DEMO_SIMULATOR`
+- `DEMO_SIM_SEED`
+- `ALLOW_QA_SEED`
+- `ALLOW_QA_RESET`
+- `NEXT_PUBLIC_DEMO_SIMULATOR`
+- `REDIS_URL`
+- `DATABASE_URL`
+- `APP_ENCRYPTION_KEY`
+- `ALLOWED_OAUTH_REDIRECT_URIS`
+
+## Observable Implemented Flows
+- `campaign planning` -> UI `/campaigns` / API `/campaigns/plan`
+- `content drafts` -> UI `/content` / API `/content`
+- `publishing` -> UI `/publish/jobs` / API `/publish/jobs`
+- `inbox` -> UI `/inbox` / API `/inbox/threads`
+- `leads` -> UI `/leads` / API `/leads`
+- `presence` -> UI `/presence` / API `/presence`
+- `seo` -> UI `/seo` / API `/seo/work-items`
+- `reputation` -> UI `/reputation` / API `/reputation/reviews`
+- `analytics` -> UI `/analytics` / API `/analytics/overview`
+- `audit/events` -> UI `/audit` + `/events` / API `/audit` + `/events`
+- `billing` -> UI `/billing` / API `/billing/subscription`
+- `agents` -> UI `/automations/agents` / API `/agents/run`

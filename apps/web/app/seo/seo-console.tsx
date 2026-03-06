@@ -110,7 +110,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
       <section className="rounded border border-slate-800 p-4">
         <button
           className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900"
-          data-testid="seo-generate-plan"
+          data-testid="tour-seo-create-task"
           onClick={generatePlan}
           type="button"
         >

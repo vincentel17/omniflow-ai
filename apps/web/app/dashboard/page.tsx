@@ -41,8 +41,9 @@ export default async function DashboardPage() {
             OmniFlow AI turns social engagement into attributable revenue with guarded automation across campaigns, inbox, and optimization workflows.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge tone="info">Phase 14 MVP ready</Badge>
+            <Badge tone="info">Phase 16 MVP ready</Badge>
             <Badge tone={health?.status === "ok" ? "success" : "warn"}>API {health?.status ?? "unknown"}</Badge>
+            {process.env.NEXT_PUBLIC_DEMO_SIMULATOR === "true" ? <Badge tone="neutral">Simulator enabled</Badge> : null}
           </div>
         </div>
       </section>
@@ -113,7 +114,7 @@ export default async function DashboardPage() {
                   <Badge tone="neutral">{event.channel}</Badge>
                 </div>
                 <p className="mt-1 text-sm text-[rgb(var(--muted-foreground))]">
-                  Source: {event.source} · {new Date(event.created_at).toLocaleString()}
+                  Source: {event.source} | {new Date(event.created_at).toLocaleString()}
                 </p>
               </li>
             ))}

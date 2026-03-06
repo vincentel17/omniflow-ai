@@ -4,10 +4,11 @@ This checklist is the execution baseline to verify end-to-end behavior in mock-s
 
 ## Preconditions
 1. Start stack: `docker compose up -d --build`
-2. Migrate DB: `pnpm run migrate`
-3. Seed deterministic demo data: `ALLOW_QA_SEED=true pnpm run seed:demo`
-4. Optional simulator tick loop: `DEMO_SIMULATOR=true DEMO_SIM_SEED=1234 pnpm run demo:simulator:tick`
-5. Web preview: `http://localhost:13000`
+2. Migrate DB: `make migrate` (or `pnpm run migrate`)
+3. Seed deterministic demo data: `make seed-demo` (or `ALLOW_QA_SEED=true pnpm run seed:demo`)
+4. Optional clean reset: `make reset-demo` (or `ALLOW_QA_RESET=true ALLOW_QA_SEED=true pnpm run reset:demo`)
+5. Optional simulator tick loop: `DEMO_SIMULATOR=true DEMO_SIM_SEED=1234 make simulator-demo-tick`
+6. Web preview: `http://localhost:13000`
 
 ## J1 Onboarding
 1. Open `/onboarding`
@@ -71,8 +72,19 @@ This checklist is the execution baseline to verify end-to-end behavior in mock-s
   - `DEMO_SIM_SEED=1234`
 - Keep tenant headers aligned with seeded org/user ids in `.env`.
 
-## Current Pass/Fail Snapshot (2026-03-04)
+## Current Pass/Fail Snapshot (2026-03-05)
 - Seed reset + seed + smoke: `PASS`
-- Demo simulator tick: `PASS` (`processed: 8`)
-- Python lint/compile checks for changed backend scripts/routes: `PASS`
-- Playwright execution: `NOT RUN` in this shell due host Node engine mismatch and container `pnpm` bootstrap issue
+- Demo simulator tick: `PASS`
+- Truth-pass Playwright execution (`tests/e2e/truth-pass.spec.ts`): `PASS`
+- Full gate (`pnpm run release-check` under pinned Node `20.18.0`): `PASS`
+
+## Seed Expectations
+- Demo orgs: `OmniFlow Generic Demo`, `OmniFlow Real Estate Demo`, `OmniFlow Home Care Demo`
+- Seed includes campaigns, drafts, publish jobs, inbox threads, leads, presence findings, SEO tasks, reviews, audit rows, and events.
+- `DEMO_SEED=1234` / `DEMO_SIM_SEED=1234` are the deterministic defaults for ordering and simulator behavior.
+
+## Troubleshooting
+- If the shell blocks at preflight, verify Node matches `.node-version` (`20.18.0`).
+- If API integration tests fail on database connectivity, confirm Postgres/Redis ports from `docker compose ps`.
+- If the UI looks empty after a rebuild, rerun `make seed-demo` and then one simulator tick.
+- If Playwright shows sparse data after route interception changes, rerun `make reset-demo`, `make seed-demo`, then `DEMO_SIMULATOR=true DEMO_SIM_SEED=1234 make simulator-demo-tick`.

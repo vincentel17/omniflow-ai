@@ -149,7 +149,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
               <p className="text-xs text-slate-500">Urgency: {review.sentiment_json.urgency ?? "n/a"}</p>
               <button
                 className="mt-2 rounded bg-slate-700 px-3 py-1 text-sm"
-                data-testid={`reputation-draft-response-${review.id}`}
+                data-testid={reviews[0]?.id === review.id ? "tour-reputation-draft-response" : `reputation-draft-response-${review.id}`}
                 onClick={() => draftResponse(review.id)}
                 type="button"
               >

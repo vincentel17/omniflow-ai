@@ -63,7 +63,12 @@ export default async function IntegrationsPage() {
       <IntegrationsClient initialSettings={opsSettings} />
 
       <section className="mt-8 rounded border border-slate-800 p-4">
-        <h2 className="text-xl font-semibold">Connector Diagnostics</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">Connector Diagnostics</h2>
+          <Link className="rounded bg-slate-800 px-3 py-2 text-sm text-slate-100" href="/settings/integrations/diagnostics">
+            Open full diagnostics
+          </Link>
+        </div>
         {!diagnostics ? (
           <p className="mt-2 text-slate-400">Diagnostics unavailable.</p>
         ) : (

@@ -82,7 +82,7 @@ export default async function AgentsPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             <form action={runNowAction}>
-              <ButtonGhost className="w-full" type="submit">Run Agents Now</ButtonGhost>
+              <ButtonGhost className="w-full" data-testid="tour-agent-run" type="submit">Run Agents Now</ButtonGhost>
             </form>
             <Link href="/automations/agents/runs" className="inline-flex w-full">
               <ButtonGhost className="w-full">View Agent Runs</ButtonGhost>

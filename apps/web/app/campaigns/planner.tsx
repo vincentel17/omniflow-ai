@@ -29,6 +29,7 @@ async function apiPost(path: string, body: unknown): Promise<Response> {
 }
 
 export function CampaignPlanner({ campaigns }: Props) {
+  const [items, setItems] = useState(campaigns);
   const [weekStart, setWeekStart] = useState("2026-02-23");
   const [status, setStatus] = useState<string | null>(null);
 
@@ -43,8 +44,9 @@ export function CampaignPlanner({ campaigns }: Props) {
       setStatus(`Create failed (${response.status})`);
       return;
     }
-    setStatus("Campaign plan created. Refreshing...");
-    window.location.reload();
+    const created = (await response.json()) as Campaign;
+    setItems((current) => [created, ...current]);
+    setStatus("Campaign plan created.");
   }
 
   async function generateContent(campaignId: string) {
@@ -62,8 +64,10 @@ export function CampaignPlanner({ campaigns }: Props) {
       setStatus(`Approve failed (${response.status})`);
       return;
     }
+    setItems((current) =>
+      current.map((campaign) => (campaign.id === campaignId ? { ...campaign, status: "approved" } : campaign)),
+    );
     setStatus("Campaign approved.");
-    window.location.reload();
   }
 
   return (
@@ -78,14 +82,14 @@ export function CampaignPlanner({ campaigns }: Props) {
             value={weekStart}
           />
         </div>
-        <button className="rounded bg-slate-200 px-4 py-2 text-slate-900" data-testid="campaign-generate-plan" type="submit">
+        <button className="rounded bg-slate-200 px-4 py-2 text-slate-900" data-testid="tour-campaign-create" type="submit">
           Generate Plan
         </button>
       </form>
       {status ? <p className="text-sm text-slate-300" data-testid="campaign-status-message">{status}</p> : null}
-      <ul className="space-y-3">
-        {campaigns.map((campaign) => (
-          <li className="rounded border border-slate-800 p-3" key={campaign.id}>
+      <ul className="space-y-3" data-testid="campaign-list">
+        {items.map((campaign) => (
+          <li className="rounded border border-slate-800 p-3" data-testid={`campaign-row-${campaign.id}`} key={campaign.id}>
             <p className="font-medium">
               {campaign.week_start_date} ({campaign.status})
             </p>
@@ -93,7 +97,7 @@ export function CampaignPlanner({ campaigns }: Props) {
             <div className="mt-3 flex gap-2">
               <button
                 className="rounded bg-slate-700 px-3 py-1 text-sm"
-                data-testid={`campaign-generate-content-${campaign.id}`}
+                data-testid={items[0]?.id === campaign.id ? "tour-drafts-generate" : `campaign-generate-content-${campaign.id}`}
                 onClick={() => generateContent(campaign.id)}
                 type="button"
               >

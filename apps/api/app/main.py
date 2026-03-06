@@ -1,9 +1,10 @@
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from .routers.admin import router as admin_router
 from .routers.ads import router as ads_router
@@ -46,6 +47,26 @@ async def request_id_middleware(request: Request, call_next) -> Response:  # typ
     response = await call_next(request)
     response.headers["X-Request-Id"] = request_id
     return response
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "request_id": request_id},
+        headers={"X-Request-Id": request_id},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Validation failed", "errors": exc.errors(), "request_id": request_id},
+        headers={"X-Request-Id": request_id},
+    )
 
 
 @app.on_event("startup")
