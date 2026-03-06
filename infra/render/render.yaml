@@ -85,7 +85,7 @@ services:
     plan: starter
     rootDir: .
     buildCommand: corepack enable && corepack prepare pnpm@9.12.2 --activate && pnpm install --frozen-lockfile && pnpm --filter @omniflow/schemas build && pnpm --filter @omniflow/web build
-    startCommand: node apps/web/server.js
+    startCommand: bash -lc 'cd apps/web && npm exec next start -- --hostname 0.0.0.0 --port ${PORT}'
     envVars:
       - key: NODE_VERSION
         value: 20.18.0
@@ -175,3 +175,4 @@ databases:
     databaseName: omniflow
     user: omniflow
     postgresMajorVersion: "16"
+
