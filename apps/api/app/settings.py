@@ -4,6 +4,14 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _normalize_postgres_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -39,6 +47,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_non_dev_requirements(self) -> "Settings":
+        self.database_url = _normalize_postgres_url(self.database_url)
         missing: list[str] = []
         if self.connector_mode == "live" and self.provider_enable_gbp:
             if not self.google_client_id:
