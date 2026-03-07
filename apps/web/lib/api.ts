@@ -25,7 +25,8 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
       "X-Omniflow-Role": context.role
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -402,3 +403,4 @@ export async function rejectApproval(approvalId: string, notes = "Rejected from 
     body: { notes },
   });
 }
+

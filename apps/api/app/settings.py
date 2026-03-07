@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     dev_user_id: str = "11111111-1111-1111-1111-111111111111"
     dev_org_id: str = "22222222-2222-2222-2222-222222222222"
     dev_role: str = "owner"
+    auth_mode: Literal["headers", "session", "hybrid"] = "hybrid"
+    auth_cookie_name: str = "omniflow_session"
+    auth_cookie_secure: bool = False
+    auth_session_ttl_seconds: int = 28800
+    cors_allowed_origins: str = "http://localhost:13000,http://localhost:3000"
     ai_mode: str = "mock"
     openai_api_key: str | None = None
     connector_mode: str = "mock"
@@ -44,6 +49,10 @@ class Settings(BaseSettings):
         if not allowed:
             return redirect_uri == self.oauth_redirect_uri
         return redirect_uri in allowed
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
     @model_validator(mode="after")
     def validate_non_dev_requirements(self) -> "Settings":

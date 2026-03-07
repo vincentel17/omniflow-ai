@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -12,6 +13,7 @@ from .routers.agents import router as agents_router
 from .routers.analytics import router as analytics_router
 from .routers.approvals import router as approvals_router
 from .routers.audit import router as audit_router
+from .routers.auth import router as auth_router
 from .routers.billing import router as billing_router
 from .routers.brand import router as brand_router
 from .routers.campaigns import router as campaigns_router
@@ -36,8 +38,17 @@ from .routers.seo import router as seo_router
 from .routers.verticals import router as vertical_router
 from .routers.workflows import router as workflows_router
 from .services.verticals import validate_pack
+from .settings import settings
 
 app = FastAPI(title="OmniFlow API", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
@@ -84,6 +95,7 @@ def validate_vertical_packs_on_startup() -> None:
 
 
 app.include_router(health_router)
+app.include_router(auth_router)
 app.include_router(org_router)
 app.include_router(admin_router)
 app.include_router(ops_router)
@@ -112,6 +124,3 @@ app.include_router(ads_router)
 app.include_router(compliance_router)
 app.include_router(optimization_router)
 app.include_router(agents_router)
-
-
-
