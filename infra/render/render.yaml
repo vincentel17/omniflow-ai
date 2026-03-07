@@ -113,7 +113,7 @@ services:
     rootDir: .
     schedule: "0 6 * * *"
     buildCommand: python -m pip install --upgrade pip && pip install -e apps/api
-    startCommand: bash -lc 'if [ "${APP_ENV:-}" != "staging" ] || [ "${ALLOW_QA_SEED:-false}" != "true" ]; then echo "skip seed-demo"; exit 0; fi; python ./scripts/seed/qa_standard.py'
+    startCommand: bash -lc 'if [ "${APP_ENV:-}" != "staging" ] || [ "${ALLOW_QA_SEED:-false}" != "true" ]; then echo "skip seed-demo"; exit 0; fi; python -m pip install -e apps/api >/tmp/seed-demo-pip.log 2>&1 || { cat /tmp/seed-demo-pip.log; exit 1; }; python ./scripts/seed/qa_standard.py'
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
@@ -144,7 +144,7 @@ services:
     rootDir: .
     schedule: "*/15 * * * *"
     buildCommand: python -m pip install --upgrade pip && pip install -e apps/api -e apps/worker
-    startCommand: bash -lc 'if [ "${APP_ENV:-}" != "staging" ] || [ "${DEMO_SIMULATOR:-false}" != "true" ]; then echo "skip demo simulator"; exit 0; fi; python ./scripts/qa/demo_simulator_tick.py'
+    startCommand: bash -lc 'if [ "${APP_ENV:-}" != "staging" ] || [ "${DEMO_SIMULATOR:-false}" != "true" ]; then echo "skip demo simulator"; exit 0; fi; python -m pip install -e apps/api -e apps/worker >/tmp/demo-sim-pip.log 2>&1 || { cat /tmp/demo-sim-pip.log; exit 1; }; python ./scripts/qa/demo_simulator_tick.py'
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
