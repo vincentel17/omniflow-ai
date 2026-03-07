@@ -48,59 +48,84 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
   const [findings, setFindings] = useState<Finding[]>(initialFindings);
   const [tasks, setTasks] = useState<PresenceTask[]>(initialTasks);
   const [status, setStatus] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   async function refresh() {
-    const [latestRes, findingsRes, tasksRes] = await Promise.all([
-      fetch(`${getApiBaseUrl()}/presence`, { headers: headers(), cache: "no-store" }),
-      fetch(`${getApiBaseUrl()}/presence/findings?limit=20&offset=0`, { headers: headers(), cache: "no-store" }),
-      fetch(`${getApiBaseUrl()}/presence/tasks?limit=20&offset=0`, { headers: headers(), cache: "no-store" })
-    ]);
-    if (!latestRes.ok || !findingsRes.ok || !tasksRes.ok) {
-      setStatus("Refresh failed.");
-      return;
+    setPendingAction("refresh");
+    setStatus(null);
+    try {
+      const [latestRes, findingsRes, tasksRes] = await Promise.all([
+        fetch(`${getApiBaseUrl()}/presence`, { headers: headers(), cache: "no-store" }),
+        fetch(`${getApiBaseUrl()}/presence/findings?limit=20&offset=0`, { headers: headers(), cache: "no-store" }),
+        fetch(`${getApiBaseUrl()}/presence/tasks?limit=20&offset=0`, { headers: headers(), cache: "no-store" })
+      ]);
+      if (!latestRes.ok || !findingsRes.ok || !tasksRes.ok) {
+        setStatus("Refresh failed.");
+        return;
+      }
+      setLatest((await latestRes.json()) as AuditRun | null);
+      setFindings((await findingsRes.json()) as Finding[]);
+      setTasks((await tasksRes.json()) as PresenceTask[]);
+    } catch {
+      setStatus("Refresh failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setLatest((await latestRes.json()) as AuditRun | null);
-    setFindings((await findingsRes.json()) as Finding[]);
-    setTasks((await tasksRes.json()) as PresenceTask[]);
   }
 
   async function runAudit() {
-    const response = await fetch(`${getApiBaseUrl()}/presence/audits/run`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        providers_to_audit: ["gbp", "meta", "linkedin", "website"],
-        website_url: "https://example.com",
-        run_mode: "manual"
-      })
-    });
-    if (!response.ok) {
-      setStatus(`Audit failed (${response.status})`);
-      return;
+    setPendingAction("audit");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/presence/audits/run`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          providers_to_audit: ["gbp", "meta", "linkedin", "website"],
+          website_url: "https://example.com",
+          run_mode: "manual"
+        })
+      });
+      if (!response.ok) {
+        setStatus(`Audit failed (${response.status})`);
+        return;
+      }
+      setStatus("Presence audit completed.");
+      await refresh();
+    } catch {
+      setStatus("Audit failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Presence audit completed.");
-    await refresh();
   }
 
   async function markDone(findingId: string) {
-    const response = await fetch(`${getApiBaseUrl()}/presence/findings/${findingId}`, {
-      method: "PATCH",
-      headers: headers(),
-      body: JSON.stringify({ status: "done" })
-    });
-    if (!response.ok) {
-      setStatus(`Update failed (${response.status})`);
-      return;
+    setPendingAction(`finding-${findingId}`);
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/presence/findings/${findingId}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ status: "done" })
+      });
+      if (!response.ok) {
+        setStatus(`Update failed (${response.status})`);
+        return;
+      }
+      setStatus("Finding updated.");
+      await refresh();
+    } catch {
+      setStatus("Update failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Finding updated.");
-    await refresh();
   }
 
   return (
     <div className="mt-6 grid gap-6">
       <section className="rounded border border-slate-800 p-4">
-        <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="tour-presence-run" onClick={runAudit} type="button">
-          Run Presence Audit
+        <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="tour-presence-run" disabled={pendingAction !== null} onClick={runAudit} type="button">
+          {pendingAction === "audit" ? "Running..." : "Run Presence Audit"}
         </button>
         {latest ? (
           <p className="mt-3 text-sm text-slate-300">
@@ -125,10 +150,11 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
               {finding.status !== "done" ? (
                 <button
                   className="mt-2 rounded bg-slate-700 px-3 py-1 text-sm"
+                  disabled={pendingAction !== null}
                   onClick={() => markDone(finding.id)}
                   type="button"
                 >
-                  Mark Done
+                  {pendingAction === `finding-${finding.id}` ? "Updating..." : "Mark Done"}
                 </button>
               ) : null}
             </li>

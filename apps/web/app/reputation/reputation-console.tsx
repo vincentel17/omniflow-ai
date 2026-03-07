@@ -40,83 +40,116 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
   const [status, setStatus] = useState<string | null>(null);
   const [draftByReview, setDraftByReview] = useState<Record<string, string>>({});
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   async function refresh() {
-    const [reviewsRes, campaignsRes] = await Promise.all([
-      fetch(`${getApiBaseUrl()}/reputation/reviews?limit=50&offset=0`, { headers: headers(), cache: "no-store" }),
-      fetch(`${getApiBaseUrl()}/reputation/campaigns?limit=50&offset=0`, { headers: headers(), cache: "no-store" })
-    ]);
-    if (!reviewsRes.ok || !campaignsRes.ok) {
-      setStatus("Refresh failed.");
-      return;
+    setPendingAction("refresh");
+    setStatus(null);
+    try {
+      const [reviewsRes, campaignsRes] = await Promise.all([
+        fetch(`${getApiBaseUrl()}/reputation/reviews?limit=50&offset=0`, { headers: headers(), cache: "no-store" }),
+        fetch(`${getApiBaseUrl()}/reputation/campaigns?limit=50&offset=0`, { headers: headers(), cache: "no-store" })
+      ]);
+      if (!reviewsRes.ok || !campaignsRes.ok) {
+        setStatus("Refresh failed.");
+        return;
+      }
+      setReviews((await reviewsRes.json()) as Review[]);
+      setCampaigns((await campaignsRes.json()) as Campaign[]);
+    } catch {
+      setStatus("Refresh failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setReviews((await reviewsRes.json()) as Review[]);
-    setCampaigns((await campaignsRes.json()) as Campaign[]);
   }
 
   async function importMockReview() {
-    const response = await fetch(`${getApiBaseUrl()}/reputation/reviews/import`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        reviews: [
-          {
-            source: "manual_import",
-            reviewer_name: "Customer",
-            rating: 2,
-            review_text: "Response time was slow and pricing unclear."
-          }
-        ]
-      })
-    });
-    if (!response.ok) {
-      setStatus(`Import failed (${response.status})`);
-      return;
+    setPendingAction("import");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/reputation/reviews/import`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          reviews: [
+            {
+              source: "manual_import",
+              reviewer_name: "Customer",
+              rating: 2,
+              review_text: "Response time was slow and pricing unclear."
+            }
+          ]
+        })
+      });
+      if (!response.ok) {
+        setStatus(`Import failed (${response.status})`);
+        return;
+      }
+      setStatus("Review imported.");
+      await refresh();
+    } catch {
+      setStatus("Import failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Review imported.");
-    await refresh();
   }
 
   async function draftResponse(reviewId: string) {
-    const response = await fetch(`${getApiBaseUrl()}/reputation/reviews/${reviewId}/draft-response`, {
-      method: "POST",
-      headers: headers()
-    });
-    if (!response.ok) {
-      setStatus(`Draft failed (${response.status})`);
-      return;
+    setPendingAction(`draft-${reviewId}`);
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/reputation/reviews/${reviewId}/draft-response`, {
+        method: "POST",
+        headers: headers()
+      });
+      if (!response.ok) {
+        setStatus(`Draft failed (${response.status})`);
+        return;
+      }
+      const payload = (await response.json()) as { response_text: string };
+      setDraftByReview((prev) => ({ ...prev, [reviewId]: payload.response_text }));
+      setStatus("Draft response generated.");
+    } catch {
+      setStatus("Draft failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    const payload = (await response.json()) as { response_text: string };
-    setDraftByReview((prev) => ({ ...prev, [reviewId]: payload.response_text }));
-    setStatus("Draft response generated.");
   }
 
   async function createCampaign() {
-    const response = await fetch(`${getApiBaseUrl()}/reputation/campaigns`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        name: `Review Request ${new Date().toISOString()}`,
-        audience: "recent_customers",
-        template_key: "review_request_v1",
-        channel: "email"
-      })
-    });
-    if (!response.ok) {
-      setStatus(`Campaign create failed (${response.status})`);
-      return;
+    setPendingAction("campaign");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/reputation/campaigns`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          name: `Review Request ${new Date().toISOString()}`,
+          audience: "recent_customers",
+          template_key: "review_request_v1",
+          channel: "email"
+        })
+      });
+      if (!response.ok) {
+        setStatus(`Campaign create failed (${response.status})`);
+        return;
+      }
+      const campaign = (await response.json()) as Campaign;
+      const start = await fetch(`${getApiBaseUrl()}/reputation/campaigns/${campaign.id}/start`, {
+        method: "POST",
+        headers: headers()
+      });
+      if (!start.ok) {
+        setStatus(`Campaign start failed (${start.status})`);
+        return;
+      }
+      setStatus("Campaign started and tasks created.");
+      await refresh();
+    } catch {
+      setStatus("Campaign failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    const campaign = (await response.json()) as Campaign;
-    const start = await fetch(`${getApiBaseUrl()}/reputation/campaigns/${campaign.id}/start`, {
-      method: "POST",
-      headers: headers()
-    });
-    if (!start.ok) {
-      setStatus(`Campaign start failed (${start.status})`);
-      return;
-    }
-    setStatus("Campaign started and tasks created.");
-    await refresh();
   }
 
   return (
@@ -126,13 +159,20 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
           <button
             className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900"
             data-testid="reputation-import-mock-review"
+            disabled={pendingAction !== null}
             onClick={importMockReview}
             type="button"
           >
-            Import Mock Review
+            {pendingAction === "import" ? "Importing..." : "Import Mock Review"}
           </button>
-          <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="reputation-create-start-campaign" onClick={createCampaign} type="button">
-            Create + Start Campaign
+          <button
+            className="rounded bg-slate-700 px-3 py-1 text-sm"
+            data-testid="reputation-create-start-campaign"
+            disabled={pendingAction !== null}
+            onClick={createCampaign}
+            type="button"
+          >
+            {pendingAction === "campaign" ? "Starting..." : "Create + Start Campaign"}
           </button>
         </div>
       </section>
@@ -150,10 +190,11 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
               <button
                 className="mt-2 rounded bg-slate-700 px-3 py-1 text-sm"
                 data-testid={reviews[0]?.id === review.id ? "tour-reputation-draft-response" : `reputation-draft-response-${review.id}`}
+                disabled={pendingAction !== null}
                 onClick={() => draftResponse(review.id)}
                 type="button"
               >
-                Draft Response
+                {pendingAction === `draft-${review.id}` ? "Drafting..." : "Draft Response"}
               </button>
               {draftByReview[review.id] ? <p className="mt-2 text-sm text-slate-300">{draftByReview[review.id]}</p> : null}
             </li>
