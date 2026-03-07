@@ -53,7 +53,7 @@ services:
     plan: starter
     rootDir: .
     buildCommand: python -m pip install --upgrade pip && pip install -e apps/api -e apps/worker
-    startCommand: python -m celery -A omniflow_worker.main.app worker --loglevel=INFO
+    startCommand: python -m celery -A omniflow_worker.main.app worker --loglevel=INFO --concurrency=1 --prefetch-multiplier=1 --max-tasks-per-child=20 --without-gossip --without-mingle
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
@@ -175,4 +175,5 @@ databases:
     databaseName: omniflow
     user: omniflow
     postgresMajorVersion: "16"
+
 
