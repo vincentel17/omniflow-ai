@@ -10,9 +10,11 @@ type EventRow = {
   created_at: string;
 };
 
+const EVENTS_PAGE_LIMIT = 100;
+
 async function getEvents(): Promise<EventRow[]> {
   try {
-    return await apiFetch<EventRow[]>("/events?limit=200&offset=0");
+    return await apiFetch<EventRow[]>(`/events?limit=${EVENTS_PAGE_LIMIT}&offset=0`);
   } catch {
     return [];
   }
