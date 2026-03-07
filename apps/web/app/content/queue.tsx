@@ -45,6 +45,7 @@ async function apiGet(path: string): Promise<Response> {
 export function ContentQueue({ items }: Props) {
   const [contentItems, setContentItems] = useState(items);
   const [status, setStatus] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (contentItems.length > 0) {
@@ -70,27 +71,43 @@ export function ContentQueue({ items }: Props) {
   }, [contentItems.length]);
 
   async function approve(contentId: string) {
-    const response = await apiPost(`/content/${contentId}/approve`, { status: "approved", notes: "Approved in UI" });
-    if (!response.ok) {
-      setStatus(`Approve failed (${response.status})`);
-      return;
+    setPendingId(contentId);
+    setStatus(null);
+    try {
+      const response = await apiPost(`/content/${contentId}/approve`, { status: "approved", notes: "Approved in UI" });
+      if (!response.ok) {
+        setStatus(`Approve failed (${response.status})`);
+        return;
+      }
+      setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "approved" } : item)));
+      setStatus("Content approved.");
+    } catch {
+      setStatus("Approve failed (network error).");
+    } finally {
+      setPendingId(null);
     }
-    setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "approved" } : item)));
-    setStatus("Content approved.");
   }
 
   async function schedule(contentId: string) {
-    const response = await apiPost(`/content/${contentId}/schedule`, {
-      provider: "linkedin",
-      account_ref: "default",
-      schedule_at: null
-    });
-    if (!response.ok) {
-      setStatus(`Schedule failed (${response.status})`);
-      return;
+    setPendingId(contentId);
+    setStatus(null);
+    try {
+      const response = await apiPost(`/content/${contentId}/schedule`, {
+        provider: "linkedin",
+        account_ref: "default",
+        schedule_at: null
+      });
+      if (!response.ok) {
+        setStatus(`Schedule failed (${response.status})`);
+        return;
+      }
+      setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "scheduled" } : item)));
+      setStatus("Publish job queued.");
+    } catch {
+      setStatus("Schedule failed (network error).");
+    } finally {
+      setPendingId(null);
     }
-    setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "scheduled" } : item)));
-    setStatus("Publish job queued.");
   }
 
   return (
@@ -110,17 +127,19 @@ export function ContentQueue({ items }: Props) {
                 className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900"
                 data-testid={contentItems[0]?.id === item.id ? "tour-drafts-approve" : `content-approve-${item.id}`}
                 onClick={() => approve(item.id)}
+                disabled={pendingId === item.id}
                 type="button"
               >
-                Approve
+                {pendingId === item.id ? "Approving..." : "Approve"}
               </button>
               <button
                 className="rounded bg-slate-700 px-3 py-1 text-sm"
                 data-testid={contentItems[0]?.id === item.id ? "tour-publish-schedule" : `content-schedule-${item.id}`}
                 onClick={() => schedule(item.id)}
+                disabled={pendingId === item.id}
                 type="button"
               >
-                Schedule
+                {pendingId === item.id ? "Scheduling..." : "Schedule"}
               </button>
             </div>
           </li>

@@ -32,6 +32,7 @@ async function apiGet(path: string): Promise<Response> {
 export function PublishJobsTable({ jobs }: Props) {
   const [items, setItems] = useState(jobs);
   const [status, setStatus] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -57,21 +58,29 @@ export function PublishJobsTable({ jobs }: Props) {
   }, [items.length]);
 
   async function cancel(jobId: string) {
-    const context = getDevContext();
-    const response = await fetch(`${getApiBaseUrl()}/publish/jobs/${jobId}/cancel`, {
-      method: "POST",
-      headers: {
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
+    setPendingId(jobId);
+    setStatus(null);
+    try {
+      const context = getDevContext();
+      const response = await fetch(`${getApiBaseUrl()}/publish/jobs/${jobId}/cancel`, {
+        method: "POST",
+        headers: {
+          "X-Omniflow-User-Id": context.userId,
+          "X-Omniflow-Org-Id": context.orgId,
+          "X-Omniflow-Role": context.role
+        }
+      });
+      if (!response.ok) {
+        setStatus(`Cancel failed (${response.status})`);
+        return;
       }
-    });
-    if (!response.ok) {
-      setStatus(`Cancel failed (${response.status})`);
-      return;
+      setItems((current) => current.map((job) => (job.id === jobId ? { ...job, status: "canceled" } : job)));
+      setStatus("Job canceled.");
+    } catch {
+      setStatus("Cancel failed (network error).");
+    } finally {
+      setPendingId(null);
     }
-    setItems((current) => current.map((job) => (job.id === jobId ? { ...job, status: "canceled" } : job)));
-    setStatus("Job canceled.");
   }
 
   return (
@@ -87,8 +96,8 @@ export function PublishJobsTable({ jobs }: Props) {
               attempts={job.attempts} external_id={job.external_id ?? "n/a"}
             </p>
             {job.last_error ? <p className="text-sm text-rose-300">{job.last_error}</p> : null}
-            <button className="mt-3 rounded bg-slate-700 px-3 py-1 text-sm" data-testid={`publish-cancel-${job.id}`} onClick={() => cancel(job.id)} type="button">
-              Cancel
+            <button className="mt-3 rounded bg-slate-700 px-3 py-1 text-sm" data-testid={`publish-cancel-${job.id}`} onClick={() => cancel(job.id)} disabled={pendingId === job.id} type="button">
+              {pendingId === job.id ? "Canceling..." : "Cancel"}
             </button>
           </li>
         ))}

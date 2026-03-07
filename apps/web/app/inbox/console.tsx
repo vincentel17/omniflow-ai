@@ -42,129 +42,186 @@ export function InboxConsole({ initialThreads }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const selectedThread = useMemo(() => threads.find((item) => item.id === selectedThreadId) ?? null, [threads, selectedThreadId]);
 
   async function refreshThreads() {
-    const response = await fetch(`${getApiBaseUrl()}/inbox/threads?limit=50&offset=0`, { headers: headers(), cache: "no-store" });
-    if (!response.ok) {
-      setStatus(`Refresh failed (${response.status})`);
-      return;
+    setPendingAction("refresh");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/inbox/threads?limit=50&offset=0`, { headers: headers(), cache: "no-store" });
+      if (!response.ok) {
+        setStatus(`Refresh failed (${response.status})`);
+        return;
+      }
+      const data = (await response.json()) as Thread[];
+      setThreads(data);
+    } catch {
+      setStatus("Refresh failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    const data = (await response.json()) as Thread[];
-    setThreads(data);
   }
 
   async function loadMessages(threadId: string) {
-    setSelectedThreadId(threadId);
-    const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${threadId}/messages?limit=100&offset=0`, { headers: headers(), cache: "no-store" });
-    if (!response.ok) {
-      setStatus(`Load messages failed (${response.status})`);
-      return;
+    setPendingAction("load");
+    setStatus(null);
+    try {
+      setSelectedThreadId(threadId);
+      const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${threadId}/messages?limit=100&offset=0`, { headers: headers(), cache: "no-store" });
+      if (!response.ok) {
+        setStatus(`Load messages failed (${response.status})`);
+        return;
+      }
+      setMessages((await response.json()) as Message[]);
+    } catch {
+      setStatus("Load messages failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setMessages((await response.json()) as Message[]);
   }
 
   async function ingestMock() {
-    const response = await fetch(`${getApiBaseUrl()}/inbox/ingest/mock`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        thread: {
-          provider: "meta",
-          account_ref: "acct-main",
-          external_thread_id: `ui-${Date.now()}`,
-          thread_type: "dm",
-          subject: "Mock inbound",
-          participants_json: [{ id: "prospect-1", display: "Prospect" }],
-          last_message_at: new Date().toISOString()
-        },
-        messages: [
-          {
-            external_message_id: `ui-msg-${Date.now()}`,
-            direction: "inbound",
-            sender_ref: "prospect-1",
-            sender_display: "Prospect",
-            body_text: "Need help buying soon. Contact me at prospect@example.com",
-            body_raw_json: {}
-          }
-        ]
-      })
-    });
-    if (!response.ok) {
-      setStatus(`Ingest failed (${response.status})`);
-      return;
+    setPendingAction("ingest");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/inbox/ingest/mock`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          thread: {
+            provider: "meta",
+            account_ref: "acct-main",
+            external_thread_id: `ui-${Date.now()}`,
+            thread_type: "dm",
+            subject: "Mock inbound",
+            participants_json: [{ id: "prospect-1", display: "Prospect" }],
+            last_message_at: new Date().toISOString()
+          },
+          messages: [
+            {
+              external_message_id: `ui-msg-${Date.now()}`,
+              direction: "inbound",
+              sender_ref: "prospect-1",
+              sender_display: "Prospect",
+              body_text: "Need help buying soon. Contact me at prospect@example.com",
+              body_raw_json: {}
+            }
+          ]
+        })
+      });
+      if (!response.ok) {
+        setStatus(`Ingest failed (${response.status})`);
+        return;
+      }
+      setStatus("Mock inbound ingested.");
+      await refreshThreads();
+    } catch {
+      setStatus("Ingest failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Mock inbound ingested.");
-    await refreshThreads();
   }
 
   async function suggestReply() {
     if (!selectedThread) return;
-    const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/suggest-reply`, {
-      method: "POST",
-      headers: headers()
-    });
-    if (!response.ok) {
-      setStatus(`Suggest failed (${response.status})`);
-      return;
+    setPendingAction("suggest");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/suggest-reply`, {
+        method: "POST",
+        headers: headers()
+      });
+      if (!response.ok) {
+        setStatus(`Suggest failed (${response.status})`);
+        return;
+      }
+      const payload = (await response.json()) as { reply_text: string };
+      setDraftText(payload.reply_text);
+      setStatus("Reply suggestion generated.");
+    } catch {
+      setStatus("Suggest failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    const payload = (await response.json()) as { reply_text: string };
-    setDraftText(payload.reply_text);
-    setStatus("Reply suggestion generated.");
   }
 
   async function draftReply() {
     if (!selectedThread) return;
-    const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/draft-reply`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ body_text: draftText || "Thanks, we will follow up shortly." })
-    });
-    if (!response.ok) {
-      setStatus(`Draft failed (${response.status})`);
-      return;
+    setPendingAction("draft");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/draft-reply`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ body_text: draftText || "Thanks, we will follow up shortly." })
+      });
+      if (!response.ok) {
+        setStatus(`Draft failed (${response.status})`);
+        return;
+      }
+      setStatus("Draft reply saved.");
+      await loadMessages(selectedThread.id);
+    } catch {
+      setStatus("Draft failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Draft reply saved.");
-    await loadMessages(selectedThread.id);
   }
 
   async function createLead() {
     if (!selectedThread) return;
-    const response = await fetch(`${getApiBaseUrl()}/leads/from-thread/${selectedThread.id}`, {
-      method: "POST",
-      headers: headers()
-    });
-    if (!response.ok) {
-      setStatus(`Lead creation failed (${response.status})`);
-      return;
+    setPendingAction("lead");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/leads/from-thread/${selectedThread.id}`, {
+        method: "POST",
+        headers: headers()
+      });
+      if (!response.ok) {
+        setStatus(`Lead creation failed (${response.status})`);
+        return;
+      }
+      setStatus("Lead created from thread.");
+      await refreshThreads();
+    } catch {
+      setStatus("Lead creation failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Lead created from thread.");
-    await refreshThreads();
   }
 
   async function closeThread() {
     if (!selectedThread) return;
-    const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/close`, {
-      method: "POST",
-      headers: headers()
-    });
-    if (!response.ok) {
-      setStatus(`Close failed (${response.status})`);
-      return;
+    setPendingAction("close");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/close`, {
+        method: "POST",
+        headers: headers()
+      });
+      if (!response.ok) {
+        setStatus(`Close failed (${response.status})`);
+        return;
+      }
+      setStatus("Thread closed.");
+      await refreshThreads();
+    } catch {
+      setStatus("Close failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Thread closed.");
-    await refreshThreads();
   }
 
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <section className="rounded border border-slate-800 p-4">
         <div className="flex gap-2">
-          <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="inbox-ingest-mock" onClick={ingestMock} type="button">
-            Ingest Mock
+          <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="inbox-ingest-mock" disabled={pendingAction !== null} onClick={ingestMock} type="button">
+            {pendingAction === "ingest" ? "Ingesting..." : "Ingest Mock"}
           </button>
-          <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={refreshThreads} type="button">
-            Refresh
+          <button className="rounded bg-slate-700 px-3 py-1 text-sm" disabled={pendingAction !== null} onClick={refreshThreads} type="button">
+            {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
           </button>
         </div>
         <ul className="mt-4 space-y-2">
@@ -192,13 +249,13 @@ export function InboxConsole({ initialThreads }: Props) {
         {selectedThread ? (
           <>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-suggest-reply" onClick={suggestReply} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-suggest-reply" disabled={pendingAction !== null} onClick={suggestReply} type="button">
                 Suggest Reply
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="tour-lead-create" onClick={createLead} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="tour-lead-create" disabled={pendingAction !== null} onClick={createLead} type="button">
                 Create Lead
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" onClick={closeThread} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" disabled={pendingAction !== null} onClick={closeThread} type="button">
                 Close
               </button>
             </div>
@@ -208,7 +265,7 @@ export function InboxConsole({ initialThreads }: Props) {
               placeholder="Draft reply text..."
               value={draftText}
             />
-            <button className="mt-2 rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="tour-inbox-send-reply" onClick={draftReply} type="button">
+            <button className="mt-2 rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="tour-inbox-send-reply" disabled={pendingAction !== null} onClick={draftReply} type="button">
               Save Draft
             </button>
             <ul className="mt-4 space-y-2">

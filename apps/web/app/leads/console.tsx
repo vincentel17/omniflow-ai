@@ -52,6 +52,7 @@ export function LeadsConsole({ initialLeads }: Props) {
   const [tasks, setTasks] = useState<NurtureTask[]>([]);
   const [nextBestAction, setNextBestAction] = useState<NextBestAction | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const selectedLead = useMemo(
     () => leads.find((item) => item.id === selectedLeadId) ?? null,
@@ -59,24 +60,36 @@ export function LeadsConsole({ initialLeads }: Props) {
   );
 
   async function refreshLeads() {
-    const response = await fetch(`${getApiBaseUrl()}/leads?limit=50&offset=0`, {
-      headers: headers(),
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      setStatus(`Refresh failed (${response.status})`);
-      return;
+    setPendingAction("refresh");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/leads?limit=50&offset=0`, {
+        headers: headers(),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        setStatus(`Refresh failed (${response.status})`);
+        return;
+      }
+      setLeads((await response.json()) as Lead[]);
+    } catch {
+      setStatus("Refresh failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setLeads((await response.json()) as Lead[]);
   }
 
   async function loadTasks(leadId: string) {
-    const response = await fetch(`${getApiBaseUrl()}/leads/${leadId}/nurture/tasks?limit=50&offset=0`, {
-      headers: headers(),
-      cache: "no-store",
-    });
-    if (!response.ok) return;
-    setTasks((await response.json()) as NurtureTask[]);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/leads/${leadId}/nurture/tasks?limit=50&offset=0`, {
+        headers: headers(),
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      setTasks((await response.json()) as NurtureTask[]);
+    } catch {
+      setStatus("Load tasks failed (network error).");
+    }
   }
 
   async function loadNextBestAction(leadId: string) {
@@ -90,77 +103,109 @@ export function LeadsConsole({ initialLeads }: Props) {
 
   async function scoreLead() {
     if (!selectedLead) return;
-    const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/score`, {
-      method: "POST",
-      headers: headers(),
-    });
-    if (!response.ok) {
-      setStatus(`Score failed (${response.status})`);
-      return;
+    setPendingAction("score");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/score`, {
+        method: "POST",
+        headers: headers(),
+      });
+      if (!response.ok) {
+        setStatus(`Score failed (${response.status})`);
+        return;
+      }
+      setScore((await response.json()) as Score);
+      setStatus("Lead scored.");
+    } catch {
+      setStatus("Score failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setScore((await response.json()) as Score);
-    setStatus("Lead scored.");
   }
 
   async function routeLead() {
     if (!selectedLead) return;
-    const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/route`, {
-      method: "POST",
-      headers: headers(),
-    });
-    if (!response.ok) {
-      setStatus(`Route failed (${response.status})`);
-      return;
+    setPendingAction("route");
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/route`, {
+        method: "POST",
+        headers: headers(),
+      });
+      if (!response.ok) {
+        setStatus(`Route failed (${response.status})`);
+        return;
+      }
+      setAssignment((await response.json()) as Assignment);
+      setStatus("Lead routed.");
+      await loadTasks(selectedLead.id);
+    } catch {
+      setStatus("Route failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setAssignment((await response.json()) as Assignment);
-    setStatus("Lead routed.");
-    await loadTasks(selectedLead.id);
   }
 
   async function applyNurture() {
     if (!selectedLead) return;
-    const suggest = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/suggest`, {
-      method: "POST",
-      headers: headers(),
-    });
-    if (!suggest.ok) {
-      setStatus(`Suggest nurture failed (${suggest.status})`);
-      return;
+    setPendingAction("nurture");
+    setStatus(null);
+    try {
+      const suggest = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/suggest`, {
+        method: "POST",
+        headers: headers(),
+      });
+      if (!suggest.ok) {
+        setStatus(`Suggest nurture failed (${suggest.status})`);
+        return;
+      }
+      const plan = (await suggest.json()) as { tasks: Array<Record<string, unknown>> };
+      const apply = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/apply`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ tasks: plan.tasks }),
+      });
+      if (!apply.ok) {
+        setStatus(`Apply nurture failed (${apply.status})`);
+        return;
+      }
+      setStatus("Nurture tasks applied.");
+      await loadTasks(selectedLead.id);
+    } catch {
+      setStatus("Apply nurture failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    const plan = (await suggest.json()) as { tasks: Array<Record<string, unknown>> };
-    const apply = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/apply`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ tasks: plan.tasks }),
-    });
-    if (!apply.ok) {
-      setStatus(`Apply nurture failed (${apply.status})`);
-      return;
-    }
-    setStatus("Nurture tasks applied.");
-    await loadTasks(selectedLead.id);
   }
 
   async function markTaskDone(taskId: string) {
     if (!selectedLead) return;
-    const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/tasks/${taskId}`, {
-      method: "PATCH",
-      headers: headers(),
-      body: JSON.stringify({ status: "done" }),
-    });
-    if (!response.ok) {
-      setStatus(`Task update failed (${response.status})`);
-      return;
+    setPendingAction(`task-${taskId}`);
+    setStatus(null);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ status: "done" }),
+      });
+      if (!response.ok) {
+        setStatus(`Task update failed (${response.status})`);
+        return;
+      }
+      setStatus("Task marked done.");
+      await loadTasks(selectedLead.id);
+    } catch {
+      setStatus("Task update failed (network error).");
+    } finally {
+      setPendingAction(null);
     }
-    setStatus("Task marked done.");
-    await loadTasks(selectedLead.id);
   }
 
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <section className="rounded border border-slate-800 p-4">
-        <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="leads-refresh" onClick={refreshLeads} type="button">
-          Refresh
+        <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="leads-refresh" disabled={pendingAction !== null} onClick={refreshLeads} type="button">
+          {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
         </button>
         <ul className="mt-4 space-y-2">
           {leads.map((lead) => (
@@ -188,13 +233,13 @@ export function LeadsConsole({ initialLeads }: Props) {
         {selectedLead ? (
           <>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-score-btn" onClick={scoreLead} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-score-btn" disabled={pendingAction !== null} onClick={scoreLead} type="button">
                 Score
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-route-btn" onClick={routeLead} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-route-btn" disabled={pendingAction !== null} onClick={routeLead} type="button">
                 Route
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-apply-nurture-btn" onClick={applyNurture} type="button">
+              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-apply-nurture-btn" disabled={pendingAction !== null} onClick={applyNurture} type="button">
                 Apply Nurture
               </button>
             </div>
@@ -230,6 +275,7 @@ export function LeadsConsole({ initialLeads }: Props) {
                     {task.status !== "done" ? (
                       <button
                         className="rounded bg-slate-700 px-2 py-1 text-xs"
+                        disabled={pendingAction !== null}
                         onClick={() => markTaskDone(task.id)}
                         type="button"
                       >
