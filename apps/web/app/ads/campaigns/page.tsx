@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
 
@@ -45,7 +47,9 @@ export default async function AdsCampaignsPage() {
             <tbody>
               {campaigns.map((campaign) => (
                 <tr key={campaign.id}>
-                  <td>{campaign.name}</td>
+                  <td>
+                    <Link className="underline-offset-4 hover:underline" href={`/ads/campaigns/${campaign.id}`}>{campaign.name}</Link>
+                  </td>
                   <td>{campaign.provider}</td>
                   <td>{campaign.objective}</td>
                   <td>{campaign.status}</td>

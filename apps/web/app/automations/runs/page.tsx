@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
 
@@ -44,8 +46,12 @@ export default async function WorkflowRunsPage() {
             <tbody>
               {runs.map((run) => (
                 <tr key={run.id}>
-                  <td className="font-mono text-xs">{run.id}</td>
-                  <td className="font-mono text-xs">{run.workflow_id}</td>
+                  <td className="font-mono text-xs">
+                    <Link className="underline-offset-4 hover:underline" href={`/automations/runs/${run.id}`}>{run.id}</Link>
+                  </td>
+                  <td className="font-mono text-xs">
+                    <Link className="underline-offset-4 hover:underline" href={`/automations/workflows/${run.workflow_id}`}>{run.workflow_id}</Link>
+                  </td>
                   <td>{run.status}</td>
                   <td>{run.started_at ?? "-"}</td>
                   <td>{run.finished_at ?? "-"}</td>

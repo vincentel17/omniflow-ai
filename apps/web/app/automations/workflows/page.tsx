@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { apiFetch } from "../../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle, EmptyState } from "../../../components/ui/primitives";
 
@@ -34,12 +36,19 @@ export default async function WorkflowsPage() {
           {workflows.map((workflow) => (
             <Card key={workflow.id}>
               <CardHeader>
-                <CardTitle>{workflow.name}</CardTitle>
+                <CardTitle>
+                  <Link className="hover:text-[rgb(var(--foreground))] underline-offset-4 hover:underline" href={`/automations/workflows/${workflow.id}`}>
+                    {workflow.name}
+                  </Link>
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-1 text-sm text-[rgb(var(--muted-foreground))]">
+              <CardContent className="space-y-2 text-sm text-[rgb(var(--muted-foreground))]">
                 <p>Key: {workflow.key}</p>
                 <p>Trigger: {workflow.trigger_type}</p>
                 <p>Status: {workflow.enabled ? "Enabled" : "Disabled"}</p>
+                <Link className="text-sm font-medium text-[rgb(var(--primary))] underline-offset-4 hover:underline" href={`/automations/workflows/${workflow.id}`}>
+                  Open workflow details
+                </Link>
               </CardContent>
             </Card>
           ))}
