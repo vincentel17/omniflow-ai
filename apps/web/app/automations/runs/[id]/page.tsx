@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { apiFetch } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { apiFetch } from "../../../../lib/api";
 
 type WorkflowRunDetail = {
   id: string;
@@ -60,13 +59,13 @@ export default async function WorkflowRunDetailPage({ params }: WorkflowRunDetai
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <article className={cn("surface-card p-6 lg:p-8", "space-y-3")}>
+        <article className="surface-card space-y-3 p-6 lg:p-8">
           <h2 className="text-xl font-semibold text-[var(--foreground)]">Summary JSON</h2>
           <pre className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface)_92%,black_8%)] p-4 text-xs text-[var(--muted-foreground)]">
             {JSON.stringify(run.summary_json ?? {}, null, 2)}
           </pre>
         </article>
-        <article className={cn("surface-card p-6 lg:p-8", "space-y-3")}>
+        <article className="surface-card space-y-3 p-6 lg:p-8">
           <h2 className="text-xl font-semibold text-[var(--foreground)]">Error JSON</h2>
           <pre className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface)_92%,black_8%)] p-4 text-xs text-[var(--muted-foreground)]">
             {JSON.stringify(run.error_json ?? {}, null, 2)}
@@ -79,7 +78,7 @@ export default async function WorkflowRunDetailPage({ params }: WorkflowRunDetai
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <article className={cn("surface-panel p-5", "space-y-2")}>
+    <article className="surface-panel space-y-2 p-5">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted-foreground)]">{label}</p>
       <p className="text-lg font-semibold text-[var(--foreground)]">{value}</p>
     </article>
@@ -96,3 +95,4 @@ function formatDateTime(value: string | null) {
     timeStyle: "short",
   }).format(new Date(value));
 }
+

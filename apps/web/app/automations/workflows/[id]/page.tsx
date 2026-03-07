@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { apiFetch } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { apiFetch } from "../../../../lib/api";
 
 type WorkflowDefinition = {
   id: string;
@@ -86,7 +85,7 @@ export default async function WorkflowDetailPage({ params }: WorkflowDetailPageP
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <article className={cn("surface-panel p-5", "space-y-2")}>
+    <article className="surface-panel space-y-2 p-5">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted-foreground)]">{label}</p>
       <p className="text-lg font-semibold text-[var(--foreground)]">{value}</p>
     </article>
@@ -99,3 +98,4 @@ function formatDateTime(value: string) {
     timeStyle: "short",
   }).format(new Date(value));
 }
+
