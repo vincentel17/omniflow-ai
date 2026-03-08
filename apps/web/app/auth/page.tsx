@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { getApiBaseUrl } from "@/lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type SessionPayload = {
   authenticated: boolean;
