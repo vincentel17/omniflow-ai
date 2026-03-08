@@ -67,7 +67,7 @@ def create_session(payload: LoginRequest, response: Response, db: Session = Depe
         value=token,
         httponly=True,
         secure=settings.auth_cookie_secure,
-        samesite="lax",
+        samesite=settings.auth_cookie_samesite,
         max_age=settings.auth_session_ttl_seconds,
         path="/",
     )
@@ -105,3 +105,4 @@ def get_session(request: Request, db: Session = Depends(get_db)) -> SessionInfoR
 def delete_session(response: Response) -> SessionInfoResponse:
     response.delete_cookie(key=settings.auth_cookie_name, path="/")
     return SessionInfoResponse(authenticated=False)
+

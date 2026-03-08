@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     auth_mode: Literal["headers", "session", "hybrid"] = "hybrid"
     auth_cookie_name: str = "omniflow_session"
     auth_cookie_secure: bool = False
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     auth_session_ttl_seconds: int = 28800
     cors_allowed_origins: str = "http://localhost:13000,http://localhost:3000"
     ai_mode: str = "mock"
@@ -87,3 +88,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
