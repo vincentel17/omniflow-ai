@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type Review = {
   id: string;
@@ -26,12 +26,8 @@ type Props = {
 };
 
 function headers(): Record<string, string> {
-  const context = getDevContext();
   return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
+    "Content-Type": "application/json"
   };
 }
 
@@ -47,8 +43,8 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
     setStatus(null);
     try {
       const [reviewsRes, campaignsRes] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/reputation/reviews?limit=50&offset=0`, { headers: headers(), cache: "no-store" }),
-        fetch(`${getApiBaseUrl()}/reputation/campaigns?limit=50&offset=0`, { headers: headers(), cache: "no-store" })
+        fetch(`${getApiBaseUrl()}/reputation/reviews?limit=50&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" }),
+        fetch(`${getApiBaseUrl()}/reputation/campaigns?limit=50&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" })
       ]);
       if (!reviewsRes.ok || !campaignsRes.ok) {
         setStatus("Refresh failed.");
@@ -70,6 +66,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/reputation/reviews/import`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({
           reviews: [
             {
@@ -100,7 +97,8 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/reputation/reviews/${reviewId}/draft-response`, {
         method: "POST",
-        headers: headers()
+        headers: headers(),
+        credentials: "include"
       });
       if (!response.ok) {
         setStatus(`Draft failed (${response.status})`);
@@ -123,6 +121,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/reputation/campaigns`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({
           name: `Review Request ${new Date().toISOString()}`,
           audience: "recent_customers",
@@ -137,7 +136,8 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
       const campaign = (await response.json()) as Campaign;
       const start = await fetch(`${getApiBaseUrl()}/reputation/campaigns/${campaign.id}/start`, {
         method: "POST",
-        headers: headers()
+        headers: headers(),
+        credentials: "include"
       });
       if (!start.ok) {
         setStatus(`Campaign start failed (${start.status})`);

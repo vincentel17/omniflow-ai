@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type WorkItem = {
   id: string;
@@ -18,12 +18,8 @@ type Props = {
 };
 
 function headers(): Record<string, string> {
-  const context = getDevContext();
   return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
+    "Content-Type": "application/json"
   };
 }
 
@@ -38,6 +34,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/seo/work-items?limit=50&offset=0`, {
         headers: headers(),
+        credentials: "include",
         cache: "no-store"
       });
       if (!response.ok) {
@@ -59,6 +56,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/seo/plan`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({ target_locations: ["seattle"] })
       });
       if (!response.ok) {
@@ -74,6 +72,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
       const create = await fetch(`${getApiBaseUrl()}/seo/work-items`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({
           type: "service_page",
           target_keyword: first.keyword,
@@ -101,7 +100,8 @@ export function SEOConsole({ initialWorkItems }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/seo/work-items/${id}/generate`, {
         method: "POST",
-        headers: headers()
+        headers: headers(),
+        credentials: "include"
       });
       if (!response.ok) {
         setStatus(`Generate failed (${response.status})`);
@@ -123,6 +123,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/seo/work-items/${id}/approve`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({ status: "approved" })
       });
       if (!response.ok) {

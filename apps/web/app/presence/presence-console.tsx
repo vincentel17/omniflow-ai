@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type AuditRun = {
   id: string;
@@ -34,12 +34,8 @@ type Props = {
 };
 
 function headers(): Record<string, string> {
-  const context = getDevContext();
   return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
+    "Content-Type": "application/json"
   };
 }
 
@@ -55,9 +51,9 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
     setStatus(null);
     try {
       const [latestRes, findingsRes, tasksRes] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/presence`, { headers: headers(), cache: "no-store" }),
-        fetch(`${getApiBaseUrl()}/presence/findings?limit=20&offset=0`, { headers: headers(), cache: "no-store" }),
-        fetch(`${getApiBaseUrl()}/presence/tasks?limit=20&offset=0`, { headers: headers(), cache: "no-store" })
+        fetch(`${getApiBaseUrl()}/presence`, { headers: headers(), cache: "no-store", credentials: "include" }),
+        fetch(`${getApiBaseUrl()}/presence/findings?limit=20&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" }),
+        fetch(`${getApiBaseUrl()}/presence/tasks?limit=20&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" })
       ]);
       if (!latestRes.ok || !findingsRes.ok || !tasksRes.ok) {
         setStatus("Refresh failed.");
@@ -80,6 +76,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
       const response = await fetch(`${getApiBaseUrl()}/presence/audits/run`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({
           providers_to_audit: ["gbp", "meta", "linkedin", "website"],
           website_url: "https://example.com",
@@ -106,6 +103,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
       const response = await fetch(`${getApiBaseUrl()}/presence/findings/${findingId}`, {
         method: "PATCH",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({ status: "done" })
       });
       if (!response.ok) {
