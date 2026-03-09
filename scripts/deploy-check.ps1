@@ -27,6 +27,10 @@ docker build -f apps/worker/Dockerfile -t omniflow-worker:staging . | Out-Null
 Write-Host "Running migrations..."
 python -m alembic -c apps/api/alembic.ini upgrade head | Out-Null
 
+Write-Host "Seeding default tenancy data..."
+$env:PYTHONPATH = (Resolve-Path "apps/api").Path
+python -m app.seed | Out-Null
+
 Write-Host "Running smoke checks..."
 
 function Remove-StagingContainerIfExists {
@@ -36,11 +40,25 @@ function Remove-StagingContainerIfExists {
   }
 }
 
+function Convert-LocalhostForDocker([string]$value) {
+  if (-not $value) {
+    return $value
+  }
+  $rewritten = $value.Replace("://localhost", "://host.docker.internal")
+  $rewritten = $rewritten.Replace("://127.0.0.1", "://host.docker.internal")
+  $rewritten = $rewritten.Replace("@localhost", "@host.docker.internal")
+  $rewritten = $rewritten.Replace("@127.0.0.1", "@host.docker.internal")
+  return $rewritten
+}
+
+$containerDatabaseUrl = Convert-LocalhostForDocker $env:DATABASE_URL
+$containerRedisUrl = Convert-LocalhostForDocker $env:REDIS_URL
+
 Remove-StagingContainerIfExists
 try {
-  docker run -d --name omniflow-api-staging-check -p ${hostPort}:8000 `
-    -e DATABASE_URL="$env:DATABASE_URL" `
-    -e REDIS_URL="$env:REDIS_URL" `
+  docker run -d --name omniflow-api-staging-check --add-host=host.docker.internal:host-gateway -p ${hostPort}:8000 `
+    -e DATABASE_URL="$containerDatabaseUrl" `
+    -e REDIS_URL="$containerRedisUrl" `
     -e TOKEN_ENCRYPTION_KEY="$env:TOKEN_ENCRYPTION_KEY" `
     omniflow-api:staging | Out-Null
   if ($LASTEXITCODE -ne 0) {
@@ -50,7 +68,7 @@ try {
   $healthy = $false
   for ($i = 0; $i -lt 30; $i++) {
     try {
-      Invoke-RestMethod -Method GET -Uri "$BaseUrl/health" | Out-Null
+      Invoke-RestMethod -Method GET -Uri "$BaseUrl/ready" | Out-Null
       $healthy = $true
       break
     } catch {
@@ -58,11 +76,15 @@ try {
     }
   }
   if (-not $healthy) {
-    throw "Staging API container failed health check at $BaseUrl/health"
+    Write-Host "Staging API container logs (tail):"
+    docker logs --tail 120 omniflow-api-staging-check
+    throw "Staging API container failed readiness check at $BaseUrl/ready"
   }
 
   powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1 -BaseUrl $BaseUrl
   if ($LASTEXITCODE -ne 0) {
+    Write-Host "Staging API container logs (tail):"
+    docker logs --tail 120 omniflow-api-staging-check
     throw "Smoke checks failed with exit code $LASTEXITCODE"
   }
 } finally {

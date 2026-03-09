@@ -5,6 +5,7 @@ ENV PYTHONUNBUFFERED=1
 RUN useradd --create-home --shell /usr/sbin/nologin appuser
 
 COPY apps/api apps/api
+COPY packages packages
 RUN pip install --no-cache-dir -e apps/api
 
 COPY apps/worker apps/worker
