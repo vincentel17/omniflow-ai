@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { getNextBestAction } from "../../lib/api";
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type Lead = {
   id: string;
@@ -35,12 +34,8 @@ type NextBestAction = {
 type Props = { initialLeads: Lead[] };
 
 function headers(): Record<string, string> {
-  const context = getDevContext();
   return {
     "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role,
   };
 }
 
@@ -66,6 +61,7 @@ export function LeadsConsole({ initialLeads }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/leads?limit=50&offset=0`, {
         headers: headers(),
         cache: "no-store",
+        credentials: "include",
       });
       if (!response.ok) {
         setStatus(`Refresh failed (${response.status})`);
@@ -84,6 +80,7 @@ export function LeadsConsole({ initialLeads }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/leads/${leadId}/nurture/tasks?limit=50&offset=0`, {
         headers: headers(),
         cache: "no-store",
+        credentials: "include",
       });
       if (!response.ok) return;
       setTasks((await response.json()) as NurtureTask[]);
@@ -94,8 +91,15 @@ export function LeadsConsole({ initialLeads }: Props) {
 
   async function loadNextBestAction(leadId: string) {
     try {
-      const suggestion = await getNextBestAction("lead", leadId);
-      setNextBestAction(suggestion);
+      const response = await fetch(`${getApiBaseUrl()}/optimization/next-best-action/lead/${leadId}`, {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        setNextBestAction(null);
+        return;
+      }
+      setNextBestAction((await response.json()) as NextBestAction);
     } catch {
       setNextBestAction(null);
     }
@@ -109,6 +113,7 @@ export function LeadsConsole({ initialLeads }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/score`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
       });
       if (!response.ok) {
         setStatus(`Score failed (${response.status})`);
@@ -131,6 +136,7 @@ export function LeadsConsole({ initialLeads }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/route`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
       });
       if (!response.ok) {
         setStatus(`Route failed (${response.status})`);
@@ -154,6 +160,7 @@ export function LeadsConsole({ initialLeads }: Props) {
       const suggest = await fetch(`${getApiBaseUrl()}/leads/${selectedLead.id}/nurture/suggest`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
       });
       if (!suggest.ok) {
         setStatus(`Suggest nurture failed (${suggest.status})`);
@@ -164,6 +171,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         method: "POST",
         headers: headers(),
         body: JSON.stringify({ tasks: plan.tasks }),
+        credentials: "include",
       });
       if (!apply.ok) {
         setStatus(`Apply nurture failed (${apply.status})`);
@@ -187,6 +195,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         method: "PATCH",
         headers: headers(),
         body: JSON.stringify({ status: "done" }),
+        credentials: "include",
       });
       if (!response.ok) {
         setStatus(`Task update failed (${response.status})`);

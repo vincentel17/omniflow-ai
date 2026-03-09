@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type PublishJob = {
   id: string;
@@ -18,14 +18,9 @@ type PublishJob = {
 type Props = { jobs: PublishJob[] };
 
 async function apiGet(path: string): Promise<Response> {
-  const context = getDevContext();
   return fetch(`${getApiBaseUrl()}${path}`, {
-    headers: {
-      "X-Omniflow-User-Id": context.userId,
-      "X-Omniflow-Org-Id": context.orgId,
-      "X-Omniflow-Role": context.role
-    },
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 }
 
@@ -61,14 +56,9 @@ export function PublishJobsTable({ jobs }: Props) {
     setPendingId(jobId);
     setStatus(null);
     try {
-      const context = getDevContext();
       const response = await fetch(`${getApiBaseUrl()}/publish/jobs/${jobId}/cancel`, {
         method: "POST",
-        headers: {
-          "X-Omniflow-User-Id": context.userId,
-          "X-Omniflow-Org-Id": context.orgId,
-          "X-Omniflow-Role": context.role
-        }
+        credentials: "include"
       });
       if (!response.ok) {
         setStatus(`Cancel failed (${response.status})`);

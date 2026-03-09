@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type Campaign = {
   id: string;
@@ -15,16 +15,13 @@ type Campaign = {
 type Props = { campaigns: Campaign[] };
 
 async function apiPost(path: string, body: unknown): Promise<Response> {
-  const context = getDevContext();
   return fetch(`${getApiBaseUrl()}${path}`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "X-Omniflow-User-Id": context.userId,
-      "X-Omniflow-Org-Id": context.orgId,
-      "X-Omniflow-Role": context.role
+      "Content-Type": "application/json"
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    credentials: "include"
   });
 }
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type Thread = {
   id: string;
@@ -27,12 +27,8 @@ type Message = {
 type Props = { initialThreads: Thread[] };
 
 function headers(): Record<string, string> {
-  const context = getDevContext();
   return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
+    "Content-Type": "application/json"
   };
 }
 
@@ -49,7 +45,11 @@ export function InboxConsole({ initialThreads }: Props) {
     setPendingAction("refresh");
     setStatus(null);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/inbox/threads?limit=50&offset=0`, { headers: headers(), cache: "no-store" });
+      const response = await fetch(`${getApiBaseUrl()}/inbox/threads?limit=50&offset=0`, {
+        headers: headers(),
+        cache: "no-store",
+        credentials: "include"
+      });
       if (!response.ok) {
         setStatus(`Refresh failed (${response.status})`);
         return;
@@ -68,7 +68,11 @@ export function InboxConsole({ initialThreads }: Props) {
     setStatus(null);
     try {
       setSelectedThreadId(threadId);
-      const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${threadId}/messages?limit=100&offset=0`, { headers: headers(), cache: "no-store" });
+      const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${threadId}/messages?limit=100&offset=0`, {
+        headers: headers(),
+        cache: "no-store",
+        credentials: "include"
+      });
       if (!response.ok) {
         setStatus(`Load messages failed (${response.status})`);
         return;
@@ -88,6 +92,7 @@ export function InboxConsole({ initialThreads }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/inbox/ingest/mock`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({
           thread: {
             provider: "meta",
@@ -130,7 +135,8 @@ export function InboxConsole({ initialThreads }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/suggest-reply`, {
         method: "POST",
-        headers: headers()
+        headers: headers(),
+        credentials: "include"
       });
       if (!response.ok) {
         setStatus(`Suggest failed (${response.status})`);
@@ -154,6 +160,7 @@ export function InboxConsole({ initialThreads }: Props) {
       const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/draft-reply`, {
         method: "POST",
         headers: headers(),
+        credentials: "include",
         body: JSON.stringify({ body_text: draftText || "Thanks, we will follow up shortly." })
       });
       if (!response.ok) {
@@ -176,7 +183,8 @@ export function InboxConsole({ initialThreads }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/leads/from-thread/${selectedThread.id}`, {
         method: "POST",
-        headers: headers()
+        headers: headers(),
+        credentials: "include"
       });
       if (!response.ok) {
         setStatus(`Lead creation failed (${response.status})`);
@@ -198,7 +206,8 @@ export function InboxConsole({ initialThreads }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${selectedThread.id}/close`, {
         method: "POST",
-        headers: headers()
+        headers: headers(),
+        credentials: "include"
       });
       if (!response.ok) {
         setStatus(`Close failed (${response.status})`);
