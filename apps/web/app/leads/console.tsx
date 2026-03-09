@@ -213,15 +213,15 @@ export function LeadsConsole({ initialLeads }: Props) {
 
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
-      <section className="rounded border border-slate-800 p-4">
-        <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="leads-refresh" disabled={pendingAction !== null} onClick={refreshLeads} type="button">
+      <section className="surface-card ui-fade-in p-4">
+        <button className="btn-enterprise btn-enterprise-secondary" data-testid="leads-refresh" disabled={pendingAction !== null} onClick={refreshLeads} type="button">
           {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
         </button>
         <ul className="mt-4 space-y-2">
           {leads.map((lead) => (
-            <li className="rounded border border-slate-800 p-3" key={lead.id}>
+            <li className="ui-hover-lift rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-3" key={lead.id}>
               <button
-                className="w-full text-left"
+                className="focus-ring w-full rounded text-left"
                 data-testid={leads[0]?.id === lead.id ? "lead-open-first" : `lead-open-${lead.id}`}
                 onClick={() => {
                   setSelectedLeadId(lead.id);
@@ -230,8 +230,8 @@ export function LeadsConsole({ initialLeads }: Props) {
                 }}
                 type="button"
               >
-                <p className="font-medium">{lead.name ?? "Unnamed Lead"}</p>
-                <p className="text-sm text-slate-400">
+                <p className="font-medium text-[rgb(var(--card-foreground))]">{lead.name ?? "Unnamed Lead"}</p>
+                <p className="text-sm text-[rgb(var(--muted-foreground))]">
                   {lead.status} | {lead.source}
                 </p>
               </button>
@@ -239,53 +239,53 @@ export function LeadsConsole({ initialLeads }: Props) {
           ))}
         </ul>
       </section>
-      <section className="rounded border border-slate-800 p-4">
-        <h2 className="text-lg font-semibold">Lead Detail</h2>
+      <section className="surface-card ui-fade-in p-4">
+        <h2 className="text-lg font-semibold text-[rgb(var(--card-foreground))]">Lead Detail</h2>
         {selectedLead ? (
           <>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-score-btn" disabled={pendingAction !== null} onClick={scoreLead} type="button">
+              <button className="btn-enterprise btn-enterprise-secondary" data-testid="lead-score-btn" disabled={pendingAction !== null} onClick={scoreLead} type="button">
                 Score
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-route-btn" disabled={pendingAction !== null} onClick={routeLead} type="button">
+              <button className="btn-enterprise btn-enterprise-secondary" data-testid="lead-route-btn" disabled={pendingAction !== null} onClick={routeLead} type="button">
                 Route
               </button>
-              <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="lead-apply-nurture-btn" disabled={pendingAction !== null} onClick={applyNurture} type="button">
+              <button className="btn-enterprise btn-enterprise-primary" data-testid="lead-apply-nurture-btn" disabled={pendingAction !== null} onClick={applyNurture} type="button">
                 Apply Nurture
               </button>
             </div>
             {score ? (
-              <pre className="mt-3 overflow-auto rounded bg-slate-900 p-2 text-xs">{JSON.stringify(score, null, 2)}</pre>
+              <pre className="mt-3 overflow-auto rounded-lg bg-[rgb(var(--muted))] p-2 text-xs ui-fade-in">{JSON.stringify(score, null, 2)}</pre>
             ) : null}
             {assignment ? (
-              <p className="mt-3 text-sm text-slate-300">
+              <p className="mt-3 text-sm text-[rgb(var(--muted-foreground))] ui-fade-in">
                 Assigned to {assignment.assigned_to_user_id} via {assignment.rule_applied}
               </p>
             ) : null}
-            <h3 className="mt-4 font-medium">Next Best Action</h3>
+            <h3 className="mt-4 font-medium text-[rgb(var(--card-foreground))]">Next Best Action</h3>
             {nextBestAction ? (
-              <div className="mt-2 rounded border border-slate-800 p-2 text-sm">
-                <p className="font-medium">{nextBestAction.action_type}</p>
-                <p className="text-slate-300">{nextBestAction.rationale}</p>
-                <p className="text-slate-400">
+              <div className="mt-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--muted))] p-2 text-sm ui-fade-in">
+                <p className="font-medium text-[rgb(var(--card-foreground))]">{nextBestAction.action_type}</p>
+                <p className="text-[rgb(var(--card-foreground))]">{nextBestAction.rationale}</p>
+                <p className="text-[rgb(var(--muted-foreground))]">
                   Expected uplift: {(nextBestAction.expected_uplift * 100).toFixed(1)}% | Confidence:{" "}
                   {(nextBestAction.confidence_score * 100).toFixed(1)}%
                 </p>
               </div>
             ) : (
-              <p className="mt-2 text-sm text-slate-400">No next-best-action suggestion available.</p>
+              <p className="mt-2 text-sm text-[rgb(var(--muted-foreground))] ui-pulse-soft">No next-best-action suggestion available.</p>
             )}
-            <h3 className="mt-4 font-medium">Nurture Tasks</h3>
+            <h3 className="mt-4 font-medium text-[rgb(var(--card-foreground))]">Nurture Tasks</h3>
             <ul className="mt-2 space-y-2 text-sm">
               {tasks.map((task) => (
-                <li className="rounded border border-slate-800 p-2" key={task.id}>
+                <li className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-2 ui-hover-lift" key={task.id}>
                   <div className="flex items-center justify-between gap-2">
                     <span>
                       {task.type} | {task.status} | {task.template_key ?? "manual"}
                     </span>
                     {task.status !== "done" ? (
                       <button
-                        className="rounded bg-slate-700 px-2 py-1 text-xs"
+                        className="btn-enterprise btn-enterprise-secondary px-2 py-1 text-xs"
                         data-testid={`lead-task-done-${task.id}`}
                         disabled={pendingAction !== null}
                         onClick={() => markTaskDone(task.id)}
@@ -300,9 +300,13 @@ export function LeadsConsole({ initialLeads }: Props) {
             </ul>
           </>
         ) : (
-          <p className="mt-3 text-slate-400">Select a lead.</p>
+          <p className="mt-3 text-[rgb(var(--muted-foreground))] ui-pulse-soft">Select a lead.</p>
         )}
-        {status ? <p className="mt-3 text-sm text-slate-300" data-testid="lead-status-message">{status}</p> : null}
+        {status ? (
+          <p className="mt-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--muted))] px-3 py-2 text-sm text-[rgb(var(--card-foreground))] ui-fade-in" data-testid="lead-status-message">
+            {status}
+          </p>
+        ) : null}
       </section>
     </div>
   );

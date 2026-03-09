@@ -120,9 +120,135 @@ a {
     0 2px 8px rgba(124, 58, 237, 0.08);
 }
 
+.surface-card-hero {
+  border: 1px solid color-mix(in oklab, rgb(var(--border)) 88%, rgb(var(--primary)) 12%);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(160deg, rgba(var(--primary), 0.08), transparent 40%),
+    rgb(var(--card));
+  box-shadow:
+    0 12px 34px -22px rgba(15, 23, 42, 0.5),
+    0 3px 12px rgba(124, 58, 237, 0.12);
+}
+
 .focus-ring:focus-visible {
   outline: 0;
   box-shadow: 0 0 0 2px rgba(var(--ring), 0.32);
+}
+
+.input-enterprise {
+  width: 100%;
+  border: 1px solid rgb(var(--border));
+  border-radius: 0.625rem;
+  background: color-mix(in oklab, rgb(var(--card)) 96%, rgb(var(--muted)) 4%);
+  color: rgb(var(--card-foreground));
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.input-enterprise::placeholder {
+  color: rgb(var(--muted-foreground));
+}
+
+.input-enterprise:hover {
+  border-color: color-mix(in oklab, rgb(var(--border)) 70%, rgb(var(--primary)) 30%);
+}
+
+.input-enterprise:focus-visible {
+  outline: 0;
+  border-color: rgb(var(--primary));
+  box-shadow: 0 0 0 3px rgba(var(--ring), 0.22);
+}
+
+.btn-enterprise {
+  border-radius: 0.625rem;
+  padding: 0.56rem 0.95rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  transition: transform 90ms ease, box-shadow 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.btn-enterprise:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-enterprise:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(var(--ring), 0.26);
+}
+
+.btn-enterprise-primary {
+  background: rgb(var(--primary-deep));
+  color: rgb(var(--primary-foreground));
+  box-shadow: 0 8px 22px -14px rgba(124, 58, 237, 0.72);
+}
+
+.btn-enterprise-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, rgb(var(--primary-deep)) 88%, rgb(var(--primary)) 12%);
+}
+
+.btn-enterprise-secondary {
+  border-color: rgb(var(--border));
+  background: rgb(var(--card));
+  color: rgb(var(--card-foreground));
+}
+
+.btn-enterprise-secondary:hover:not(:disabled) {
+  background: color-mix(in oklab, rgb(var(--card)) 90%, rgb(var(--muted)) 10%);
+}
+
+.ui-fade-in {
+  animation: ui-fade-in 220ms ease-out both;
+}
+
+.ui-hover-lift {
+  transition: transform 140ms ease, box-shadow 160ms ease;
+}
+
+.ui-hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px -18px rgba(15, 23, 42, 0.55);
+}
+
+.ui-pulse-soft {
+  animation: ui-pulse-soft 1.6s ease-in-out infinite;
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ui-pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-fade-in,
+  .ui-hover-lift,
+  .ui-pulse-soft {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .table-base {

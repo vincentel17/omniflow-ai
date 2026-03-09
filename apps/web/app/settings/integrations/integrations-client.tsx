@@ -56,7 +56,7 @@ export function IntegrationsClient({ initialSettings }: Props) {
   }
 
   return (
-    <Card className="mt-6">
+    <Card className="mt-6 ui-fade-in">
       <CardHeader>
         <CardTitle>Connector Controls</CardTitle>
       </CardHeader>
@@ -64,7 +64,7 @@ export function IntegrationsClient({ initialSettings }: Props) {
         <form className="space-y-4" onSubmit={submit}>
           <label className="block text-sm">
             <span className="mb-1 block text-[rgb(var(--muted-foreground))]">Connector Mode</span>
-            <Select onChange={(event) => setConnectorMode(event.target.value as "mock" | "live")} value={connectorMode}>
+            <Select className="input-enterprise" onChange={(event) => setConnectorMode(event.target.value as "mock" | "live")} value={connectorMode}>
               <option value="mock">mock</option>
               <option value="live">live</option>
             </Select>
@@ -72,7 +72,7 @@ export function IntegrationsClient({ initialSettings }: Props) {
 
           <div className="grid gap-2 sm:grid-cols-2">
             {sortedProviders.map((key) => (
-              <label className="flex items-center gap-2 rounded-xl border border-[rgb(var(--border))] p-3 text-sm" key={key}>
+              <label className="ui-hover-lift flex items-center gap-2 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-3 text-sm" key={key}>
                 <Checkbox
                   checked={Boolean(providers[key])}
                   onChange={(event) => setProviders((current) => ({ ...current, [key]: event.target.checked }))}
@@ -82,8 +82,12 @@ export function IntegrationsClient({ initialSettings }: Props) {
             ))}
           </div>
 
-          <Button type="submit">Save Integrations</Button>
-          {status ? <p className="text-sm text-[rgb(var(--muted-foreground))]">{status}</p> : null}
+          <Button className="btn-enterprise btn-enterprise-primary" type="submit">
+            Save Integrations
+          </Button>
+          {status ? (
+            <p className="ui-fade-in rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--muted))] px-3 py-2 text-sm text-[rgb(var(--card-foreground))]">{status}</p>
+          ) : null}
         </form>
       </CardContent>
     </Card>

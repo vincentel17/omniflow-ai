@@ -51,7 +51,7 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
+        <Card className="ui-hover-lift">
           <CardHeader>
             <CardTitle>Activation</CardTitle>
           </CardHeader>
@@ -60,7 +60,7 @@ export default async function DashboardPage() {
             <p className="mt-1 text-sm text-[rgb(var(--muted-foreground))]">Pilot org activation rate</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="ui-hover-lift">
           <CardHeader>
             <CardTitle>Inbox SLA</CardTitle>
           </CardHeader>
@@ -69,7 +69,7 @@ export default async function DashboardPage() {
             <p className="mt-1 text-sm text-[rgb(var(--muted-foreground))]">Median first-response time</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="ui-hover-lift">
           <CardHeader>
             <CardTitle>Publish Success</CardTitle>
           </CardHeader>
@@ -78,7 +78,7 @@ export default async function DashboardPage() {
             <p className="mt-1 text-sm text-[rgb(var(--muted-foreground))]">Last 24h job completion</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="ui-hover-lift">
           <CardHeader>
             <CardTitle>Connector Mode</CardTitle>
           </CardHeader>
@@ -89,28 +89,30 @@ export default async function DashboardPage() {
         </Card>
       </section>
 
-      <section className="surface-card p-4">
+      <section className="surface-card ui-fade-in p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Recent Activity</h2>
-          <Link className="focus-ring rounded-xl border border-[rgb(var(--border))] px-3 py-2 text-sm hover:bg-[rgb(var(--muted))]" href="/events">
+          <h2 className="text-base font-semibold">Recent Activity</h2>
+          <Link className="btn-enterprise btn-enterprise-secondary focus-ring" href="/events">
             View all events
           </Link>
         </div>
 
         {events.length === 0 ? (
-          <EmptyState
-            title="No recent events"
-            description="When ingestion and automations run, activity will appear here with source and channel metadata."
-            action={
-              <Link className="text-sm font-semibold text-[rgb(var(--primary-deep))]" href="/settings/integrations">
-                Configure integrations
-              </Link>
-            }
-          />
+          <div className="ui-pulse-soft">
+            <EmptyState
+              title="No recent events"
+              description="When ingestion and automations run, activity will appear here with source and channel metadata."
+              action={
+                <Link className="text-sm font-semibold text-[rgb(var(--primary-deep))]" href="/settings/integrations">
+                  Configure integrations
+                </Link>
+              }
+            />
+          </div>
         ) : (
           <ul className="space-y-2">
             {events.map((event) => (
-              <li className="rounded-xl border border-[rgb(var(--border))] p-3" key={event.id}>
+              <li className="ui-hover-lift rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--card))] p-3" key={event.id}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">{event.type}</p>
                   <Badge tone="neutral">{event.channel}</Badge>
