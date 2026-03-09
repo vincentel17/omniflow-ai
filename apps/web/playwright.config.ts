@@ -24,7 +24,8 @@ export default defineConfig({
     cwd: __dirname,
     env: {
       CI: "1",
-      PLAYWRIGHT: "1"
+      PLAYWRIGHT: "1",
+      PLAYWRIGHT_WEB_SERVER: "1"
     }
   }
 });

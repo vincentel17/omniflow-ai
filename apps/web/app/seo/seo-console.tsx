@@ -29,9 +29,11 @@ export function SEOConsole({ initialWorkItems }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  async function refresh() {
+  async function refresh(options?: { preserveStatus?: boolean }) {
     setPendingAction("refresh");
-    setStatus(null);
+    if (!options?.preserveStatus) {
+      setStatus(null);
+    }
     try {
       const response = await fetch(`${getApiBaseUrl()}/seo/work-items?limit=50&offset=0`, {
         headers: headers(),
@@ -87,7 +89,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         return;
       }
       setStatus("SEO plan generated and work item created.");
-      await refresh();
+      await refresh({ preserveStatus: true });
     } catch {
       setStatus("Plan failed (network error).");
     } finally {
@@ -109,7 +111,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         return;
       }
       setStatus("SEO content generated.");
-      await refresh();
+      await refresh({ preserveStatus: true });
     } catch {
       setStatus("Generate failed (network error).");
     } finally {
@@ -132,7 +134,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         return;
       }
       setStatus("SEO work item approved.");
-      await refresh();
+      await refresh({ preserveStatus: true });
     } catch {
       setStatus("Approve failed (network error).");
     } finally {
@@ -156,7 +158,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
           className="ml-2 rounded bg-slate-700 px-3 py-1 text-sm"
           data-testid="seo-refresh"
           disabled={pendingAction !== null}
-          onClick={refresh}
+          onClick={() => void refresh()}
           type="button"
         >
           {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}

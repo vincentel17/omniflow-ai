@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -13,7 +15,13 @@ from ..settings import settings
 
 def _fernet() -> Fernet:
     key = settings.app_encryption_key or settings.token_encryption_key
-    return Fernet(key.encode("utf-8"))
+    try:
+        return Fernet(key.encode("utf-8"))
+    except ValueError:
+        # Backward compatibility: allow raw shared secrets by deriving a stable
+        # Fernet-compatible key from SHA-256(secret).
+        derived = base64.urlsafe_b64encode(hashlib.sha256(key.encode("utf-8")).digest())
+        return Fernet(derived)
 
 
 def encrypt_token(token: str) -> str:

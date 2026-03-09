@@ -47,9 +47,11 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
   const [status, setStatus] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  async function refresh() {
+  async function refresh(options?: { preserveStatus?: boolean }) {
     setPendingAction("refresh");
-    setStatus(null);
+    if (!options?.preserveStatus) {
+      setStatus(null);
+    }
     try {
       const [latestRes, findingsRes, tasksRes] = await Promise.all([
         fetch(`${getApiBaseUrl()}/presence`, { headers: headers(), cache: "no-store", credentials: "include" }),
@@ -90,7 +92,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
         return;
       }
       setStatus("Presence audit completed.");
-      await refresh();
+      await refresh({ preserveStatus: true });
     } catch {
       setStatus("Audit failed (network error).");
     } finally {
@@ -113,7 +115,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
         return;
       }
       setStatus("Finding updated.");
-      await refresh();
+      await refresh({ preserveStatus: true });
     } catch {
       setStatus("Update failed (network error).");
     } finally {
@@ -127,7 +129,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
         <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="tour-presence-run" disabled={pendingAction !== null} onClick={runAudit} type="button">
           {pendingAction === "audit" ? "Running..." : "Run Presence Audit"}
         </button>
-        <button className="ml-2 rounded bg-slate-700 px-3 py-1 text-sm" data-testid="presence-refresh" disabled={pendingAction !== null} onClick={refresh} type="button">
+        <button className="ml-2 rounded bg-slate-700 px-3 py-1 text-sm" data-testid="presence-refresh" disabled={pendingAction !== null} onClick={() => void refresh()} type="button">
           {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
         </button>
         {latest ? (

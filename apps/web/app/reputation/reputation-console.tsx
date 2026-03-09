@@ -39,9 +39,11 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
   const [draftByReview, setDraftByReview] = useState<Record<string, string>>({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  async function refresh() {
+  async function refresh(options?: { preserveStatus?: boolean }) {
     setPendingAction("refresh");
-    setStatus(null);
+    if (!options?.preserveStatus) {
+      setStatus(null);
+    }
     try {
       const [reviewsRes, campaignsRes] = await Promise.all([
         fetch(`${getApiBaseUrl()}/reputation/reviews?limit=50&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" }),
@@ -85,7 +87,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         return;
       }
       setStatus("Review imported.");
-      await refresh();
+      await refresh({ preserveStatus: true });
     } catch {
       setStatus("Import failed (network error).");
     } finally {
@@ -146,7 +148,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         return;
       }
       setStatus("Campaign started and tasks created.");
-      await refresh();
+      await refresh({ preserveStatus: true });
     } catch {
       setStatus("Campaign failed (network error).");
     } finally {
@@ -180,7 +182,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
             className="rounded bg-slate-700 px-3 py-1 text-sm"
             data-testid="reputation-refresh"
             disabled={pendingAction !== null}
-            onClick={refresh}
+            onClick={() => void refresh()}
             type="button"
           >
             {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}

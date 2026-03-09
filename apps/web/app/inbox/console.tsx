@@ -42,9 +42,11 @@ export function InboxConsole({ initialThreads }: Props) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const selectedThread = useMemo(() => threads.find((item) => item.id === selectedThreadId) ?? null, [threads, selectedThreadId]);
 
-  async function refreshThreads() {
+  async function refreshThreads(options?: { preserveStatus?: boolean }) {
     setPendingAction("refresh");
-    setStatus(null);
+    if (!options?.preserveStatus) {
+      setStatus(null);
+    }
     try {
       const response = await fetch(`${getApiBaseUrl()}/inbox/threads?limit=50&offset=0`, {
         headers: headers(),
@@ -64,9 +66,11 @@ export function InboxConsole({ initialThreads }: Props) {
     }
   }
 
-  async function loadMessages(threadId: string) {
+  async function loadMessages(threadId: string, options?: { preserveStatus?: boolean }) {
     setPendingAction("load");
-    setStatus(null);
+    if (!options?.preserveStatus) {
+      setStatus(null);
+    }
     try {
       setSelectedThreadId(threadId);
       const response = await fetch(`${getApiBaseUrl()}/inbox/threads/${threadId}/messages?limit=100&offset=0`, {
@@ -121,7 +125,7 @@ export function InboxConsole({ initialThreads }: Props) {
         return;
       }
       setStatus("Mock inbound ingested.");
-      await refreshThreads();
+      await refreshThreads({ preserveStatus: true });
     } catch {
       setStatus("Ingest failed (network error).");
     } finally {
@@ -169,7 +173,7 @@ export function InboxConsole({ initialThreads }: Props) {
         return;
       }
       setStatus("Draft reply saved.");
-      await loadMessages(selectedThread.id);
+      await loadMessages(selectedThread.id, { preserveStatus: true });
     } catch {
       setStatus("Draft failed (network error).");
     } finally {
@@ -192,7 +196,7 @@ export function InboxConsole({ initialThreads }: Props) {
         return;
       }
       setStatus("Lead created from thread.");
-      await refreshThreads();
+      await refreshThreads({ preserveStatus: true });
     } catch {
       setStatus("Lead creation failed (network error).");
     } finally {
@@ -230,7 +234,7 @@ export function InboxConsole({ initialThreads }: Props) {
           <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="inbox-ingest-mock" disabled={pendingAction !== null} onClick={ingestMock} type="button">
             {pendingAction === "ingest" ? "Ingesting..." : "Ingest Mock"}
           </button>
-          <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-refresh" disabled={pendingAction !== null} onClick={refreshThreads} type="button">
+          <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-refresh" disabled={pendingAction !== null} onClick={() => void refreshThreads()} type="button">
             {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
           </button>
         </div>

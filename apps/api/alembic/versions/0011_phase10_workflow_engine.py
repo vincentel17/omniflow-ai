@@ -9,6 +9,7 @@ from typing import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0011_phase10_workflow_engine"
 down_revision: str | None = "0010_phase9_conn_health"
@@ -19,6 +20,81 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.execute("ALTER TYPE approval_entity_type_enum ADD VALUE IF NOT EXISTS 'workflow_run'")
     op.execute("ALTER TYPE approval_entity_type_enum ADD VALUE IF NOT EXISTS 'workflow_action_run'")
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'workflow_trigger_type_enum') THEN
+                CREATE TYPE workflow_trigger_type_enum AS ENUM ('event', 'schedule');
+            END IF;
+        END$$;
+        """
+    )
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'workflow_run_status_enum') THEN
+                CREATE TYPE workflow_run_status_enum AS ENUM (
+                    'queued',
+                    'running',
+                    'succeeded',
+                    'failed',
+                    'blocked',
+                    'approval_pending',
+                    'skipped'
+                );
+            END IF;
+        END$$;
+        """
+    )
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'workflow_action_run_status_enum') THEN
+                CREATE TYPE workflow_action_run_status_enum AS ENUM (
+                    'queued',
+                    'running',
+                    'succeeded',
+                    'failed',
+                    'blocked',
+                    'approval_pending',
+                    'skipped'
+                );
+            END IF;
+        END$$;
+        """
+    )
+
+    workflow_trigger_type_enum = postgresql.ENUM(
+        "event",
+        "schedule",
+        name="workflow_trigger_type_enum",
+        create_type=False,
+    )
+    workflow_run_status_enum = postgresql.ENUM(
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "blocked",
+        "approval_pending",
+        "skipped",
+        name="workflow_run_status_enum",
+        create_type=False,
+    )
+    workflow_action_run_status_enum = postgresql.ENUM(
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "blocked",
+        "approval_pending",
+        "skipped",
+        name="workflow_action_run_status_enum",
+        create_type=False,
+    )
 
     op.create_table(
         "workflows",
@@ -26,7 +102,7 @@ def upgrade() -> None:
         sa.Column("key", sa.String(length=120), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("trigger_type", sa.Enum("event", "schedule", name="workflow_trigger_type_enum"), nullable=False),
+        sa.Column("trigger_type", workflow_trigger_type_enum, nullable=False),
         sa.Column("managed_by_pack", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("definition_json", sa.JSON(), nullable=False, server_default=sa.text("'{}'::json")),
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -47,16 +123,7 @@ def upgrade() -> None:
         sa.Column("trigger_event_id", sa.Uuid(), nullable=True),
         sa.Column(
             "status",
-            sa.Enum(
-                "queued",
-                "running",
-                "succeeded",
-                "failed",
-                "blocked",
-                "approval_pending",
-                "skipped",
-                name="workflow_run_status_enum",
-            ),
+            workflow_run_status_enum,
             nullable=False,
         ),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
@@ -84,16 +151,7 @@ def upgrade() -> None:
         sa.Column("action_type", sa.String(length=100), nullable=False),
         sa.Column(
             "status",
-            sa.Enum(
-                "queued",
-                "running",
-                "succeeded",
-                "failed",
-                "blocked",
-                "approval_pending",
-                "skipped",
-                name="workflow_action_run_status_enum",
-            ),
+            workflow_action_run_status_enum,
             nullable=False,
         ),
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),

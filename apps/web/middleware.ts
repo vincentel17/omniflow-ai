@@ -24,6 +24,11 @@ function isPublicPath(pathname: string): boolean {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const playwrightBypass = process.env.PLAYWRIGHT === "1" && process.env.PLAYWRIGHT_WEB_SERVER === "1";
+  if (playwrightBypass) {
+    return NextResponse.next();
+  }
+
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
