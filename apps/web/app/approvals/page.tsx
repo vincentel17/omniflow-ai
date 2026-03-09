@@ -1,5 +1,6 @@
 import { apiFetch } from "../../lib/api";
-import { DataTable, EmptyState } from "../../components/ui/primitives";
+import { EmptyState } from "../../components/ui/primitives";
+import { ApprovalsConsole } from "./approvals-console";
 
 type Approval = {
   id: string;
@@ -30,28 +31,7 @@ export default async function ApprovalsPage() {
       {approvals.length === 0 ? (
         <EmptyState title="No pending approvals" description="Approval requests will appear here when high-risk actions are queued." />
       ) : (
-        <div className="surface-card p-4">
-          <DataTable>
-            <thead>
-              <tr>
-                <th>Approval</th>
-                <th>Entity</th>
-                <th>Status</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {approvals.map((item) => (
-                <tr key={item.id}>
-                  <td className="font-mono text-xs">{item.id}</td>
-                  <td>{item.entity_type}:{" "}<span className="font-mono text-xs">{item.entity_id}</span></td>
-                  <td>{item.status}</td>
-                  <td>{item.created_at}</td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
-        </div>
+        <ApprovalsConsole initialApprovals={approvals} />
       )}
     </main>
   );
