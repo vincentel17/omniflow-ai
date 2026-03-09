@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle, EmptyState } from "../../../components/ui/primitives";
+import { WorkflowActions } from "./workflow-actions";
 
 type Workflow = {
   id: string;
@@ -46,6 +47,7 @@ export default async function WorkflowsPage() {
                 <p>Key: {workflow.key}</p>
                 <p>Trigger: {workflow.trigger_type}</p>
                 <p>Status: {workflow.enabled ? "Enabled" : "Disabled"}</p>
+                <WorkflowActions workflowId={workflow.id} enabled={workflow.enabled} />
                 <Link className="text-sm font-medium text-[rgb(var(--primary))] underline-offset-4 hover:underline" href={`/automations/workflows/${workflow.id}`}>
                   Open workflow details
                 </Link>

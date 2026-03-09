@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
+import { CreativeActions } from "./creative-actions";
 
 type AdCreative = {
   id: string;
@@ -49,6 +50,7 @@ export default async function AdsCreativesPage() {
                 <th>Campaign</th>
                 <th>Format</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -60,6 +62,9 @@ export default async function AdsCreativesPage() {
                   </td>
                   <td>{creative.format}</td>
                   <td>{creative.status}</td>
+                  <td>
+                    <CreativeActions creativeId={creative.id} status={creative.status} />
+                  </td>
                 </tr>
               ))}
             </tbody>

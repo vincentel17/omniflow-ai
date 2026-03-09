@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
+import { ExperimentActions } from "./experiment-actions";
 
 type AdExperiment = {
   id: string;
@@ -49,6 +50,7 @@ export default async function AdsExperimentsPage() {
                 <th>Campaign</th>
                 <th>Status</th>
                 <th>Success Metric</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -60,6 +62,9 @@ export default async function AdsExperimentsPage() {
                   </td>
                   <td>{experiment.status}</td>
                   <td>{experiment.success_metric}</td>
+                  <td>
+                    <ExperimentActions experimentId={experiment.id} status={experiment.status} />
+                  </td>
                 </tr>
               ))}
             </tbody>
