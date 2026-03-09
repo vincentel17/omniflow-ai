@@ -18,5 +18,8 @@ python -m alembic -c apps/api/alembic.ini upgrade head | Out-Null
 
 Write-Host "Running smoke checks..."
 powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1 -BaseUrl $BaseUrl
+if ($LASTEXITCODE -ne 0) {
+  throw "Smoke checks failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "deploy-check completed"

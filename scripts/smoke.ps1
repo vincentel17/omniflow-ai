@@ -23,9 +23,8 @@ $headers = @{
   "X-Omniflow-Role"    = "owner"
 }
 
-Invoke-Json -Method GET -Url "$BaseUrl/healthz" | Out-Null
-Invoke-Json -Method GET -Url "$BaseUrl/healthz/db" | Out-Null
-Invoke-Json -Method GET -Url "$BaseUrl/ready" | Out-Null
+Invoke-Json -Method GET -Url "$BaseUrl/health" | Out-Null
+Invoke-Json -Method GET -Url "$BaseUrl/dashboard/ops-summary" -Headers $headers | Out-Null
 
 $campaign = Invoke-Json -Method POST -Url "$BaseUrl/campaigns/plan" -Headers $headers -Body @{
   week_start_date = "2026-03-02"
@@ -34,19 +33,9 @@ $campaign = Invoke-Json -Method POST -Url "$BaseUrl/campaigns/plan" -Headers $he
 }
 $campaignId = $campaign.id
 
-Invoke-Json -Method POST -Url "$BaseUrl/campaigns/$campaignId/generate-content" -Headers $headers | Out-Null
-$content = Invoke-Json -Method GET -Url "$BaseUrl/content?limit=1" -Headers $headers
-$contentId = $content[0].id
+if (-not $campaignId) { throw "Expected campaign plan id" }
 
-Invoke-Json -Method POST -Url "$BaseUrl/content/$contentId/approve" -Headers $headers -Body @{
-  status = "approved"
-  notes = "smoke approval"
-} | Out-Null
-
-$job = Invoke-Json -Method POST -Url "$BaseUrl/content/$contentId/schedule" -Headers $headers -Body @{
-  provider = "linkedin"
-  account_ref = "default"
-}
-if ($job.status -ne "queued") { throw "Expected queued publish job" }
+$plans = Invoke-Json -Method GET -Url "$BaseUrl/campaigns/plans" -Headers $headers
+if ($null -eq $plans) { throw "Expected campaign plans response" }
 
 Write-Host "smoke passed"

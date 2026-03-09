@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: join(__dirname, "../.."),
   allowedDevOrigins: ["127.0.0.1"],
   distDir:
-    process.env.PLAYWRIGHT === "1"
+    process.env.PLAYWRIGHT === "1" && process.env.PLAYWRIGHT_WEB_SERVER === "1"
       ? ".next-playwright"
       : process.env.NEXT_DIST_DIR ?? ".next-build"
 };
