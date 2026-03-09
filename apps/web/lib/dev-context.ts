@@ -1,6 +1,12 @@
 import { buildDevContext, getDefaultDevContext, normalizePreviewSelection, parseCookieHeader, type DevContext } from "./preview-context";
 
 export type { DevContext } from "./preview-context";
+export type SessionContext = {
+  authenticated: boolean;
+  user_id: string;
+  org_id: string;
+  role: string;
+};
 
 export function getDevContext(): DevContext {
   if (typeof window === "undefined") {
@@ -26,6 +32,49 @@ export async function getRequestDevContext(): Promise<DevContext> {
     return buildDevContext(selection.previewOrg, selection.previewRole);
   } catch {
     return getDefaultDevContext();
+  }
+}
+
+export async function getRequestSessionContext(): Promise<SessionContext | null> {
+  if (typeof window !== "undefined") {
+    return null;
+  }
+
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    const cookieHeader = store
+      .getAll()
+      .map((entry) => `${entry.name}=${entry.value}`)
+      .join("; ");
+    if (!cookieHeader) {
+      return null;
+    }
+
+    const response = await fetch(`${getApiBaseUrl()}/auth/session`, {
+      cache: "no-store",
+      headers: { Cookie: cookieHeader }
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as {
+      authenticated?: boolean;
+      session?: { user_id?: string; org_id?: string; role?: string } | null;
+    };
+    if (!payload.authenticated || !payload.session?.user_id || !payload.session.org_id || !payload.session.role) {
+      return null;
+    }
+
+    return {
+      authenticated: true,
+      user_id: payload.session.user_id,
+      org_id: payload.session.org_id,
+      role: payload.session.role
+    };
+  } catch {
+    return null;
   }
 }
 

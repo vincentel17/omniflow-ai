@@ -13,12 +13,13 @@ type AppShellProps = {
   children: React.ReactNode;
   orgId: string;
   orgName: string;
-  role: PreviewRole;
+  role: string;
   previewOrg: PreviewOrgKey;
   isRealEstate: boolean;
   envLabel: string;
   aiMode: string;
   connectorMode: string;
+  sessionMode?: boolean;
 };
 
 function AppIcon({ name }: { name: string }) {
@@ -222,7 +223,7 @@ function NavContent({ isRealEstate }: { isRealEstate: boolean }) {
   );
 }
 
-export function AppShell({ children, orgName, role, previewOrg, isRealEstate, envLabel, aiMode, connectorMode }: AppShellProps) {
+export function AppShell({ children, orgName, role, previewOrg, isRealEstate, envLabel, aiMode, connectorMode, sessionMode = false }: AppShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
@@ -250,7 +251,11 @@ export function AppShell({ children, orgName, role, previewOrg, isRealEstate, en
                 <Badge tone="warn">Connector {connectorMode}</Badge>
                 <ThemeToggle />
               </div>
-              <PreviewContextControl initialOrg={previewOrg} initialRole={role} />
+              {sessionMode ? (
+                <p className="text-xs text-[rgb(var(--muted-foreground))]">Session auth active</p>
+              ) : (
+                <PreviewContextControl initialOrg={previewOrg} initialRole={role as PreviewRole} />
+              )}
             </div>
           </div>
         </header>

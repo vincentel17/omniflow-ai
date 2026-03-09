@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "../components/app-shell";
 import { ToastProvider } from "../components/ui/toast";
-import { getRequestDevContext } from "../lib/dev-context";
+import { getRequestDevContext, getRequestSessionContext } from "../lib/dev-context";
 import { getCurrentPackSlug } from "../lib/vertical-pack";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -23,9 +23,13 @@ function envLabel(): string {
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
+  const session = await getRequestSessionContext();
   const context = await getRequestDevContext();
   const packSlug = await getCurrentPackSlug();
   const isRealEstate = packSlug === "real-estate";
+  const effectiveOrgId = session?.org_id ?? context.orgId;
+  const effectiveOrgName = session?.org_id ?? context.orgName;
+  const effectiveRole = session?.role ?? context.role;
 
   return (
     <html className="dark" lang="en" suppressHydrationWarning>
@@ -36,10 +40,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             connectorMode={process.env.NEXT_PUBLIC_CONNECTOR_MODE ?? "mock"}
             envLabel={envLabel()}
             isRealEstate={isRealEstate}
-            orgId={context.orgId}
-            orgName={context.orgName}
+            orgId={effectiveOrgId}
+            orgName={effectiveOrgName}
             previewOrg={context.previewOrg}
-            role={context.role}
+            role={effectiveRole}
+            sessionMode={Boolean(session)}
           >
             {children}
           </AppShell>
