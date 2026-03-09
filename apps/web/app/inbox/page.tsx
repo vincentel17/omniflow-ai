@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 
 import { InboxConsole } from "./console";
 
@@ -22,6 +23,7 @@ async function getThreads(): Promise<Thread[]> {
 }
 
 export default async function InboxPage() {
+  await requireAuthSession();
   const threads = await getThreads();
   return (
     <main className="page-shell">

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
+import { requireAuthSession } from "../../../lib/server-auth";
 import { CampaignActions } from "./campaign-actions";
 
 type AdCampaign = {
@@ -22,6 +23,7 @@ async function getCampaigns(): Promise<AdCampaign[]> {
 }
 
 export default async function AdsCampaignsPage() {
+  await requireAuthSession();
   const campaigns = await getCampaigns();
 
   return (

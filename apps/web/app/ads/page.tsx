@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/primitives";
+import { requireAuthSession } from "../../lib/server-auth";
 
 type AdsSettings = {
   enable_ads_automation: boolean;
@@ -24,6 +25,7 @@ async function getAdsSettings(): Promise<AdsSettings | null> {
 }
 
 export default async function AdsOverviewPage() {
+  await requireAuthSession();
   const settings = await getAdsSettings();
 
   return (

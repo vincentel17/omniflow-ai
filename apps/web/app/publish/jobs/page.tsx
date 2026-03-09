@@ -1,4 +1,5 @@
 import { apiFetch } from "../../../lib/api";
+import { requireAuthSession } from "../../../lib/server-auth";
 
 import { PublishJobsTable } from "./table";
 
@@ -34,6 +35,7 @@ async function getOpsSettings(): Promise<OpsSettings> {
 }
 
 export default async function PublishJobsPage() {
+  await requireAuthSession();
   const [jobs, settings] = await Promise.all([getJobs(), getOpsSettings()]);
   const liveMode = settings.connector_mode === "live";
   return (

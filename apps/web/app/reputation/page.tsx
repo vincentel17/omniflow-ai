@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 
 import { ReputationConsole } from "./reputation-console";
 
@@ -19,6 +20,7 @@ type Campaign = {
 };
 
 export default async function ReputationPage() {
+  await requireAuthSession();
   const [reviews, campaigns] = await Promise.all([
     apiFetch<Review[]>("/reputation/reviews?limit=50&offset=0").catch(() => []),
     apiFetch<Campaign[]>("/reputation/campaigns?limit=50&offset=0").catch(() => [])

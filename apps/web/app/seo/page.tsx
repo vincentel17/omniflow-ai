@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 
 import { SEOConsole } from "./seo-console";
 
@@ -12,6 +13,7 @@ type WorkItem = {
 };
 
 export default async function SEOPage() {
+  await requireAuthSession();
   const workItems = await apiFetch<WorkItem[]>("/seo/work-items?limit=50&offset=0").catch(() => []);
   return (
     <main className="page-shell">

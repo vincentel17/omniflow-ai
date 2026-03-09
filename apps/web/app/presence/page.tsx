@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 
 import { PresenceConsole } from "./presence-console";
 
@@ -26,6 +27,7 @@ type PresenceTask = {
 };
 
 export default async function PresencePage() {
+  await requireAuthSession();
   const [latest, findings, tasks] = await Promise.all([
     apiFetch<AuditRun | null>("/presence").catch(() => null),
     apiFetch<Finding[]>("/presence/findings?limit=20&offset=0").catch(() => []),

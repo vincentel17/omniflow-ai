@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle, EmptyState } from "../../../components/ui/primitives";
+import { requireAuthSession } from "../../../lib/server-auth";
 import { WorkflowActions } from "./workflow-actions";
 
 type Workflow = {
@@ -21,6 +22,7 @@ async function getWorkflows(): Promise<Workflow[]> {
 }
 
 export default async function WorkflowsPage() {
+  await requireAuthSession();
   const workflows = await getWorkflows();
 
   return (

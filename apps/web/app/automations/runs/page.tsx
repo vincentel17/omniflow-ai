@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
+import { requireAuthSession } from "../../../lib/server-auth";
 
 type WorkflowRun = {
   id: string;
@@ -20,6 +21,7 @@ async function getRuns(): Promise<WorkflowRun[]> {
 }
 
 export default async function WorkflowRunsPage() {
+  await requireAuthSession();
   const runs = await getRuns();
 
   return (

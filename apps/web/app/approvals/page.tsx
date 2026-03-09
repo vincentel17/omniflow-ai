@@ -1,5 +1,6 @@
 import { apiFetch } from "../../lib/api";
 import { EmptyState } from "../../components/ui/primitives";
+import { requireAuthSession } from "../../lib/server-auth";
 import { ApprovalsConsole } from "./approvals-console";
 
 type Approval = {
@@ -19,6 +20,7 @@ async function getApprovals(): Promise<Approval[]> {
 }
 
 export default async function ApprovalsPage() {
+  await requireAuthSession();
   const approvals = await getApprovals();
 
   return (

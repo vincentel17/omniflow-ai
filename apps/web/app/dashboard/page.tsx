@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState } from "../../components/ui/primitives";
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 
 type EventRow = {
   id: string;
@@ -30,6 +31,7 @@ async function getHealth(): Promise<Health | null> {
 }
 
 export default async function DashboardPage() {
+  await requireAuthSession();
   const [events, health] = await Promise.all([getRecentEvents(), getHealth()]);
 
   return (

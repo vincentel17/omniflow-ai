@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
+import { requireAuthSession } from "../../../lib/server-auth";
 import { CreativeActions } from "./creative-actions";
 
 type AdCreative = {
@@ -28,6 +29,7 @@ async function getCreatives(): Promise<PageState> {
 }
 
 export default async function AdsCreativesPage() {
+  await requireAuthSession();
   const { creatives, error } = await getCreatives();
 
   return (

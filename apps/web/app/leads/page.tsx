@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 
 import { LeadsConsole } from "./console";
 
@@ -22,6 +23,7 @@ async function getLeads(): Promise<Lead[]> {
 }
 
 export default async function LeadsPage() {
+  await requireAuthSession();
   const leads = await getLeads();
   return (
     <main className="page-shell">

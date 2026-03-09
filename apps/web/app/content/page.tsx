@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 import { ContentQueue } from "./queue";
 
 type ContentItem = {
@@ -20,6 +21,7 @@ async function getContent(): Promise<ContentItem[]> {
 }
 
 export default async function ContentPage() {
+  await requireAuthSession();
   const items = await getContent();
   return (
     <main className="page-shell">

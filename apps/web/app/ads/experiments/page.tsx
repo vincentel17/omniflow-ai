@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { apiFetch } from "../../../lib/api";
 import { DataTable, EmptyState } from "../../../components/ui/primitives";
+import { requireAuthSession } from "../../../lib/server-auth";
 import { ExperimentActions } from "./experiment-actions";
 
 type AdExperiment = {
@@ -28,6 +29,7 @@ async function getExperiments(): Promise<PageState> {
 }
 
 export default async function AdsExperimentsPage() {
+  await requireAuthSession();
   const { experiments, error } = await getExperiments();
 
   return (

@@ -1,4 +1,5 @@
 import { apiFetch } from "../../lib/api";
+import { requireAuthSession } from "../../lib/server-auth";
 import { CampaignPlanner } from "./planner";
 
 type Campaign = {
@@ -18,6 +19,7 @@ async function getCampaigns(): Promise<Campaign[]> {
 }
 
 export default async function CampaignsPage() {
+  await requireAuthSession();
   const campaigns = await getCampaigns();
   return (
     <main className="page-shell">
