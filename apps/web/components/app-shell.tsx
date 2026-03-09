@@ -6,15 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { navSections } from "../lib/nav";
 import { cn } from "../lib/cn";
-import { previewOrgs, type PreviewOrgKey, type PreviewRole } from "../lib/preview-context";
 import { Badge, ButtonGhost } from "./ui/primitives";
 
 type AppShellProps = {
   children: React.ReactNode;
-  orgId: string;
   orgName: string;
   role: string;
-  previewOrg: PreviewOrgKey;
   isRealEstate: boolean;
   envLabel: string;
   aiMode: string;
@@ -112,76 +109,6 @@ function Breadcrumbs() {
   );
 }
 
-function PreviewContextControl({ initialOrg, initialRole }: { initialOrg: PreviewOrgKey; initialRole: PreviewRole }) {
-  const [selectedOrg, setSelectedOrg] = useState<PreviewOrgKey>(initialOrg);
-  const [selectedRole, setSelectedRole] = useState<PreviewRole>(initialRole);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function applySelection() {
-    setIsSaving(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/preview-context", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ previewOrg: selectedOrg, previewRole: selectedRole }),
-      });
-      if (!response.ok) {
-        throw new Error("Failed to update preview context.");
-      }
-      window.location.reload();
-    } catch (applyError) {
-      setError(applyError instanceof Error ? applyError.message : "Failed to update preview context.");
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--card))]/80 p-3 text-xs shadow-[var(--shadow-soft)]">
-      <p className="font-semibold uppercase tracking-[0.12em] text-[rgb(var(--muted-foreground))]">Preview context</p>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2">
-          <span className="text-[rgb(var(--muted-foreground))]">Org</span>
-          <select
-            aria-label="Select preview organization"
-            className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm"
-            onChange={(event) => setSelectedOrg(event.target.value as PreviewOrgKey)}
-            value={selectedOrg}
-          >
-            {Object.entries(previewOrgs).map(([key, org]) => (
-              <option key={key} value={key}>{org.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <span className="text-[rgb(var(--muted-foreground))]">Role</span>
-          <select
-            aria-label="Select preview role"
-            className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm"
-            onChange={(event) => setSelectedRole(event.target.value as PreviewRole)}
-            value={selectedRole}
-          >
-            <option value="owner">Owner</option>
-            <option value="admin">Admin</option>
-            <option value="member">Member</option>
-            <option value="agent">Agent</option>
-          </select>
-        </label>
-        <button
-          className="focus-ring rounded-xl bg-[rgb(var(--primary))] px-3 py-2 text-sm font-medium text-[rgb(var(--primary-foreground))] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isSaving}
-          onClick={applySelection}
-          type="button"
-        >
-          {isSaving ? "Applying..." : "Apply"}
-        </button>
-      </div>
-      {error ? <p className="text-[rgb(var(--destructive))]">{error}</p> : null}
-    </div>
-  );
-}
-
 function NavContent({ isRealEstate }: { isRealEstate: boolean }) {
   const pathname = usePathname();
 
@@ -223,7 +150,7 @@ function NavContent({ isRealEstate }: { isRealEstate: boolean }) {
   );
 }
 
-export function AppShell({ children, orgName, role, previewOrg, isRealEstate, envLabel, aiMode, connectorMode, sessionMode = false }: AppShellProps) {
+export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMode, connectorMode, sessionMode = false }: AppShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
@@ -254,7 +181,7 @@ export function AppShell({ children, orgName, role, previewOrg, isRealEstate, en
               {sessionMode ? (
                 <p className="text-xs text-[rgb(var(--muted-foreground))]">Session auth active</p>
               ) : (
-                <PreviewContextControl initialOrg={previewOrg} initialRole={role as PreviewRole} />
+                <p className="text-xs text-[rgb(var(--muted-foreground))]">Sign in via /auth to access protected actions.</p>
               )}
             </div>
           </div>
