@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import { getApiBaseUrl } from "../../lib/dev-context";
 
@@ -12,7 +13,24 @@ type SessionPayload = {
   } | null;
 };
 
+function setMirroredSessionCookie(payload: SessionPayload) {
+  if (!payload.authenticated || !payload.session) {
+    document.cookie = "omniflow_session_ctx=; Path=/; Max-Age=0; SameSite=Lax";
+    return;
+  }
+
+  const raw = JSON.stringify({
+    user_id: payload.session.user_id,
+    org_id: payload.session.org_id,
+    role: payload.session.role
+  });
+  const encoded = btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  document.cookie = `omniflow_session_ctx=${encoded}; Path=/; Max-Age=86400; SameSite=Lax`;
+}
+
 export default function AuthPage(): JSX.Element {
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next") || "/dashboard";
   const apiBase = useMemo(() => getApiBaseUrl(), []);
   const [email, setEmail] = useState("");
   const [orgId, setOrgId] = useState("");
@@ -26,7 +44,11 @@ export default function AuthPage(): JSX.Element {
       const response = await fetch(`${apiBase}/auth/session`, { credentials: "include", cache: "no-store" });
       const payload = (await response.json()) as SessionPayload;
       setSession(payload);
+      setMirroredSessionCookie(payload);
       setMessage(payload.authenticated ? "Session is active." : "No active session.");
+      if (payload.authenticated) {
+        window.location.assign(nextPath);
+      }
     } catch {
       setMessage("Failed to check session.");
     } finally {
@@ -52,7 +74,7 @@ export default function AuthPage(): JSX.Element {
         return;
       }
       await checkSession();
-      setMessage("Session created. You can now use session auth mode.");
+      setMessage("Session created. Redirecting...");
     } catch {
       setMessage("Login failed.");
     } finally {
@@ -64,6 +86,7 @@ export default function AuthPage(): JSX.Element {
     setLoading(true);
     try {
       await fetch(`${apiBase}/auth/session`, { method: "DELETE", credentials: "include" });
+      setMirroredSessionCookie({ authenticated: false, session: null });
       setSession({ authenticated: false, session: null });
       setMessage("Session cleared.");
     } catch {

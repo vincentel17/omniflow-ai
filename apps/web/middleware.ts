@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-const SESSION_COOKIE_KEYS = ["omniflow_session", "session"];
+const SESSION_COOKIE_KEYS = ["omniflow_session", "session", "omniflow_session_ctx"];
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === "/auth") {

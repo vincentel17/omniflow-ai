@@ -13,6 +13,14 @@ export async function getRequestSessionContext(): Promise<SessionContext | null>
   try {
     const { cookies } = await import("next/headers");
     const store = await cookies();
+    const mirrored = store.get("omniflow_session_ctx")?.value;
+    if (mirrored) {
+      const parsed = parseMirroredSession(mirrored);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
     const cookieHeader = store
       .getAll()
       .map((entry) => `${entry.name}=${entry.value}`)
@@ -42,6 +50,24 @@ export async function getRequestSessionContext(): Promise<SessionContext | null>
       user_id: payload.session.user_id,
       org_id: payload.session.org_id,
       role: payload.session.role
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseMirroredSession(value: string): SessionContext | null {
+  try {
+    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    const payload = JSON.parse(decoded) as Partial<SessionContext>;
+    if (!payload.user_id || !payload.org_id || !payload.role) {
+      return null;
+    }
+    return {
+      authenticated: true,
+      user_id: payload.user_id,
+      org_id: payload.org_id,
+      role: payload.role
     };
   } catch {
     return null;

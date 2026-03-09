@@ -15,6 +15,8 @@ export const metadata: Metadata = {
   description: "Conversion-optimized AI-assisted revenue operations layer"
 };
 
+export const dynamic = "force-dynamic";
+
 function envLabel(): string {
   const env = (process.env.NODE_ENV ?? "development").toUpperCase();
   if (env === "PRODUCTION") return "PROD";
