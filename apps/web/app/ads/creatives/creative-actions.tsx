@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getApiBaseUrl } from "../../../lib/dev-context";
+import { readApiError } from "../../../lib/http";
 
 type Props = {
   creativeId: string;
@@ -27,7 +28,7 @@ export function CreativeActions({ creativeId, status }: Props) {
         credentials: "include",
       });
       if (!response.ok) {
-        setMessage(`Approve failed (${response.status})`);
+        setMessage(await readApiError(response, "Approve failed"));
         return;
       }
       setMessage("Approved. Refreshing...");

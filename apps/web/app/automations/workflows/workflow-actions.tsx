@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getApiBaseUrl } from "../../../lib/dev-context";
+import { readApiError } from "../../../lib/http";
 
 type Props = {
   workflowId: string;
@@ -24,7 +25,7 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
         body: JSON.stringify({ enabled: !enabled }),
       });
       if (!response.ok) {
-        setMessage(`Toggle failed (${response.status})`);
+        setMessage(await readApiError(response, "Toggle failed"));
         return;
       }
       setMessage("Workflow updated. Refreshing...");
@@ -52,7 +53,7 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
         }),
       });
       if (!response.ok) {
-        setMessage(`Dry-run failed (${response.status})`);
+        setMessage(await readApiError(response, "Dry-run failed"));
         return;
       }
       const payload = (await response.json()) as { matched: boolean; actions?: unknown[] };

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { getApiBaseUrl } from "../../../lib/dev-context";
+import { readApiError } from "../../../lib/http";
 
 type PublishJob = {
   id: string;
@@ -61,7 +62,7 @@ export function PublishJobsTable({ jobs }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Cancel failed (${response.status})`);
+        setStatus(await readApiError(response, "Cancel failed"));
         return;
       }
       setItems((current) => current.map((job) => (job.id === jobId ? { ...job, status: "canceled" } : job)));

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getApiBaseUrl } from "../../../lib/dev-context";
+import { readApiError } from "../../../lib/http";
 
 type Props = {
   experimentId: string;
@@ -40,7 +41,7 @@ export function ExperimentActions({ experimentId, status }: Props) {
         credentials: "include",
       });
       if (!response.ok) {
-        setMessage(`Action failed (${response.status})`);
+        setMessage(await readApiError(response, "Action failed"));
         return;
       }
       setMessage("Updated. Refreshing...");

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type Approval = {
   id: string;
@@ -35,7 +36,7 @@ export function ApprovalsConsole({ initialApprovals }: Props) {
         }),
       });
       if (!response.ok) {
-        setStatus(`${decision === "approve" ? "Approve" : "Reject"} failed (${response.status}).`);
+        setStatus(await readApiError(response, decision === "approve" ? "Approve failed" : "Reject failed"));
         return;
       }
       const updated = (await response.json()) as Approval;
