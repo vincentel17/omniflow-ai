@@ -1,39 +1,9 @@
-import { buildDevContext, getDefaultDevContext, normalizePreviewSelection, parseCookieHeader, type DevContext } from "./preview-context";
-
-export type { DevContext } from "./preview-context";
 export type SessionContext = {
   authenticated: boolean;
   user_id: string;
   org_id: string;
   role: string;
 };
-
-export function getDevContext(): DevContext {
-  if (typeof window === "undefined") {
-    return getDefaultDevContext();
-  }
-
-  const cookies = parseCookieHeader(window.document.cookie);
-  const { previewOrg, previewRole } = normalizePreviewSelection(cookies.omniflow_preview_org, cookies.omniflow_preview_role);
-  return buildDevContext(previewOrg, previewRole);
-}
-
-export async function getRequestDevContext(): Promise<DevContext> {
-  if (typeof window !== "undefined") {
-    return getDevContext();
-  }
-
-  try {
-    const { cookies } = await import("next/headers");
-    const store = await cookies();
-    const previewOrg = store.get("omniflow_preview_org")?.value;
-    const previewRole = store.get("omniflow_preview_role")?.value;
-    const selection = normalizePreviewSelection(previewOrg, previewRole);
-    return buildDevContext(selection.previewOrg, selection.previewRole);
-  } catch {
-    return getDefaultDevContext();
-  }
-}
 
 export async function getRequestSessionContext(): Promise<SessionContext | null> {
   if (typeof window !== "undefined") {
