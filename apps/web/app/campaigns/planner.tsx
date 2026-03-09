@@ -95,31 +95,35 @@ export function CampaignPlanner({ campaigns }: Props) {
 
   return (
     <div className="mt-6 space-y-6">
-      <form className="flex max-w-lg items-end gap-3 rounded border border-slate-800 p-4" onSubmit={handleCreate}>
+      <form className="surface-card flex max-w-xl items-end gap-3 p-4" onSubmit={handleCreate}>
         <div className="flex-1">
-          <label className="block text-sm text-slate-300">Week Start</label>
+          <label className="block text-sm font-medium text-[rgb(var(--card-foreground))]">Week Start</label>
           <input
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-900 p-2"
+            className="input-enterprise mt-1"
             onChange={(event) => setWeekStart(event.target.value)}
             type="date"
             value={weekStart}
           />
         </div>
-        <button className="rounded bg-slate-200 px-4 py-2 text-slate-900" data-testid="tour-campaign-create" disabled={pendingAction !== null} type="submit">
+        <button className="btn-enterprise btn-enterprise-primary" data-testid="tour-campaign-create" disabled={pendingAction !== null} type="submit">
           {pendingAction === "create" ? "Generating..." : "Generate Plan"}
         </button>
       </form>
-      {status ? <p className="text-sm text-slate-300" data-testid="campaign-status-message">{status}</p> : null}
+      {status ? (
+        <p className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--muted))] px-3 py-2 text-sm text-[rgb(var(--card-foreground))]" data-testid="campaign-status-message">
+          {status}
+        </p>
+      ) : null}
       <ul className="space-y-3" data-testid="campaign-list">
         {items.map((campaign) => (
-          <li className="rounded border border-slate-800 p-3" data-testid={`campaign-row-${campaign.id}`} key={campaign.id}>
-            <p className="font-medium">
+          <li className="surface-card p-3" data-testid={`campaign-row-${campaign.id}`} key={campaign.id}>
+            <p className="font-medium text-[rgb(var(--card-foreground))]">
               {campaign.week_start_date} ({campaign.status})
             </p>
-            <p className="text-sm text-slate-400">Pack: {campaign.vertical_pack_slug}</p>
+            <p className="text-sm text-[rgb(var(--muted-foreground))]">Pack: {campaign.vertical_pack_slug}</p>
             <div className="mt-3 flex gap-2">
               <button
-                className="rounded bg-slate-700 px-3 py-1 text-sm"
+                className="btn-enterprise btn-enterprise-secondary"
                 data-testid={items[0]?.id === campaign.id ? "tour-drafts-generate" : `campaign-generate-content-${campaign.id}`}
                 onClick={() => generateContent(campaign.id)}
                 disabled={pendingAction !== null}
@@ -127,7 +131,7 @@ export function CampaignPlanner({ campaigns }: Props) {
               >
                 {pendingAction === `generate-${campaign.id}` ? "Generating..." : "Generate Content"}
               </button>
-              <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid={`campaign-approve-${campaign.id}`} onClick={() => approve(campaign.id)} disabled={pendingAction !== null} type="button">
+              <button className="btn-enterprise btn-enterprise-primary" data-testid={`campaign-approve-${campaign.id}`} onClick={() => approve(campaign.id)} disabled={pendingAction !== null} type="button">
                 {pendingAction === `approve-${campaign.id}` ? "Approving..." : "Approve"}
               </button>
             </div>

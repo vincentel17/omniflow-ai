@@ -97,36 +97,44 @@ export default function AuthPage(): JSX.Element {
   }
 
   return (
-    <main className="page-shell space-y-6">
-      <section className="surface-card space-y-3 p-5">
-        <h1 className="text-2xl font-semibold">Auth Session</h1>
-        <p className="text-sm text-slate-300">{message}</p>
-        <form className="flex flex-col gap-3 md:max-w-lg" onSubmit={submitLogin}>
-          <label className="space-y-1 text-sm">
-            <span>Email</span>
+    <main className="page-shell">
+      <section className="surface-card-hero mx-auto max-w-2xl space-y-6 p-6 md:p-8">
+        <header className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--muted-foreground))]">Secure Access</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-[rgb(var(--card-foreground))]">Sign in to OmniFlow</h1>
+          <p className="max-w-xl text-sm text-[rgb(var(--muted-foreground))]">
+            Enter your seeded user email to create a secure session. Enterprise controls stay unchanged; this page only manages session state.
+          </p>
+        </header>
+        <p className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--muted))] px-3 py-2 text-sm text-[rgb(var(--card-foreground))]">
+          {message}
+        </p>
+        <form className="flex flex-col gap-4 md:max-w-xl" onSubmit={submitLogin}>
+          <label className="space-y-1.5 text-sm">
+            <span className="font-medium">Email</span>
             <input
-              className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2"
+              className="input-enterprise"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="owner@example.com"
               required
             />
           </label>
-          <label className="space-y-1 text-sm">
-            <span>Org ID (optional)</span>
+          <label className="space-y-1.5 text-sm">
+            <span className="font-medium">Org ID (optional)</span>
             <input
-              className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2"
+              className="input-enterprise"
               value={orgId}
               onChange={(event) => setOrgId(event.target.value)}
               placeholder="00000000-0000-0000-0000-000000000000"
             />
           </label>
-          <div className="flex gap-2">
-            <button className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium" disabled={loading} type="submit">
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-enterprise btn-enterprise-primary" disabled={loading} type="submit">
               Sign In
             </button>
             <button
-              className="rounded-md border border-slate-600 px-4 py-2 text-sm font-medium"
+              className="btn-enterprise btn-enterprise-secondary"
               disabled={loading}
               onClick={checkSession}
               type="button"
@@ -134,7 +142,7 @@ export default function AuthPage(): JSX.Element {
               Check Session
             </button>
             <button
-              className="rounded-md border border-slate-600 px-4 py-2 text-sm font-medium"
+              className="btn-enterprise btn-enterprise-secondary"
               disabled={loading}
               onClick={logout}
               type="button"
@@ -146,8 +154,8 @@ export default function AuthPage(): JSX.Element {
       </section>
 
       {session && (
-        <section className="surface-card p-5 text-sm">
-          <pre>{JSON.stringify(session, null, 2)}</pre>
+        <section className="surface-card mx-auto mt-6 max-w-2xl p-5 text-sm">
+          <pre className="overflow-x-auto rounded-md bg-[rgb(var(--muted))] p-3">{JSON.stringify(session, null, 2)}</pre>
         </section>
       )}
     </main>

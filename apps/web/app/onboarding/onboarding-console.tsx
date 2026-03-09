@@ -87,16 +87,16 @@ export function OnboardingConsole() {
   const percent = steps.length === 0 ? 0 : Math.round((doneCount / steps.length) * 100);
 
   return (
-    <div className="space-y-6 p-6 text-slate-100">
-      <div className="rounded border border-slate-700 bg-slate-900 p-4">
-        <h1 className="text-xl font-semibold">Pilot Onboarding</h1>
-        <p className="mt-1 text-sm text-slate-300">Guided 30-day content-to-lead sprint checklist.</p>
-        <div className="mt-3 text-sm text-slate-300">Progress: {doneCount}/{steps.length} ({percent}%)</div>
-        <div className="mt-2 h-2 w-full rounded bg-slate-700">
-          <div className="h-2 rounded bg-emerald-400" style={{ width: `${percent}%` }} />
+    <div className="page-shell space-y-6">
+      <div className="surface-card-hero space-y-3 p-5">
+        <h1 className="text-2xl font-semibold tracking-tight text-[rgb(var(--card-foreground))]">Pilot Onboarding</h1>
+        <p className="text-sm text-[rgb(var(--muted-foreground))]">Guided 30-day content-to-lead sprint checklist.</p>
+        <div className="text-sm text-[rgb(var(--muted-foreground))]">Progress: {doneCount}/{steps.length} ({percent}%)</div>
+        <div className="h-2 w-full rounded bg-[rgb(var(--muted))]">
+          <div className="h-2 rounded bg-[rgb(var(--success))]" style={{ width: `${percent}%` }} />
         </div>
         <button
-          className="mt-4 rounded bg-slate-200 px-3 py-2 text-slate-900"
+          className="btn-enterprise btn-enterprise-primary mt-2"
           data-testid="tour-onboarding-create-org"
           disabled={loading}
           onClick={startSession}
@@ -106,17 +106,17 @@ export function OnboardingConsole() {
         </button>
       </div>
 
-      <div className="rounded border border-slate-700 bg-slate-900 p-4">
-        <h2 className="text-lg font-medium">Steps</h2>
+      <div className="surface-card p-5">
+        <h2 className="text-lg font-medium text-[rgb(var(--card-foreground))]">Steps</h2>
         <ul className="mt-3 space-y-2">
           {steps.map((step) => (
-            <li className="flex items-center justify-between rounded border border-slate-800 px-3 py-2" key={step.id}>
-              <span className="text-sm">{step.id}</span>
+            <li className="flex items-center justify-between rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--card))] px-3 py-2" key={step.id}>
+              <span className="text-sm text-[rgb(var(--card-foreground))]">{step.id}</span>
               {step.done ? (
-                <span className="text-xs text-emerald-300">Completed</span>
+                <span className="text-xs text-[rgb(var(--success))]">Completed</span>
               ) : (
                 <button
-                  className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200"
+                  className="btn-enterprise btn-enterprise-secondary px-2 py-1 text-xs"
                   data-testid={step.id === "select_vertical_pack" ? "tour-pack-select" : `onboarding-step-${step.id}`}
                   disabled={loading || !session}
                   onClick={() => completeStep(step.id)}
@@ -130,7 +130,11 @@ export function OnboardingConsole() {
         </ul>
       </div>
 
-      {message ? <p className="text-sm text-amber-300" data-testid="onboarding-message">{message}</p> : null}
+      {message ? (
+        <p className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--muted))] px-3 py-2 text-sm text-[rgb(var(--card-foreground))]" data-testid="onboarding-message">
+          {message}
+        </p>
+      ) : null}
     </div>
   );
 }
