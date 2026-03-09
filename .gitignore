@@ -16,3 +16,5 @@ __pycache__/
 .pytest_cache/
 *.tsbuildinfo
 .DS_Store
+apps/api/*.db
+apps/web/test-results/
