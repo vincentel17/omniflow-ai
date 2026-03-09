@@ -2,22 +2,12 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type Props = {
   workflowId: string;
   enabled: boolean;
 };
-
-function contextHeaders(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role,
-  };
-}
 
 export function WorkflowActions({ workflowId, enabled }: Props) {
   const [pending, setPending] = useState<"toggle" | "test" | null>(null);
@@ -29,7 +19,7 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/workflows/${workflowId}`, {
         method: "PATCH",
-        headers: contextHeaders(),
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ enabled: !enabled }),
       });
@@ -52,7 +42,7 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/workflows/${workflowId}/test`, {
         method: "POST",
-        headers: contextHeaders(),
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           event_type: "WORKFLOW_DRY_RUN",
@@ -89,4 +79,3 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
     </div>
   );
 }
-

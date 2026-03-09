@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../../lib/dev-context";
 
 type ChecklistItem = {
   id: string;
@@ -33,16 +33,6 @@ type Props = {
   initialCommunications: Communication[];
 };
 
-function headers(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
-  };
-}
-
 export function DealDetailConsole({ dealId, initialChecklist, initialDocuments, initialCommunications }: Props) {
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initialChecklist);
   const [documents, setDocuments] = useState<DocumentRequest[]>(initialDocuments);
@@ -51,9 +41,21 @@ export function DealDetailConsole({ dealId, initialChecklist, initialDocuments, 
 
   async function refresh() {
     const [c, d, m] = await Promise.all([
-      fetch(`${getApiBaseUrl()}/re/deals/${dealId}/checklist-items?limit=100&offset=0`, { headers: headers(), cache: "no-store" }),
-      fetch(`${getApiBaseUrl()}/re/deals/${dealId}/documents?limit=100&offset=0`, { headers: headers(), cache: "no-store" }),
-      fetch(`${getApiBaseUrl()}/re/deals/${dealId}/communications?limit=100&offset=0`, { headers: headers(), cache: "no-store" })
+      fetch(`${getApiBaseUrl()}/re/deals/${dealId}/checklist-items?limit=100&offset=0`, {
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
+      }),
+      fetch(`${getApiBaseUrl()}/re/deals/${dealId}/documents?limit=100&offset=0`, {
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
+      }),
+      fetch(`${getApiBaseUrl()}/re/deals/${dealId}/communications?limit=100&offset=0`, {
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
+      })
     ]);
     if (!c.ok || !d.ok || !m.ok) {
       setStatus("Refresh failed.");
@@ -67,7 +69,8 @@ export function DealDetailConsole({ dealId, initialChecklist, initialDocuments, 
   async function applyChecklist() {
     const response = await fetch(`${getApiBaseUrl()}/re/deals/${dealId}/checklists/apply-template`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ template_name: "under_contract_core" })
     });
     if (!response.ok) {
@@ -81,7 +84,8 @@ export function DealDetailConsole({ dealId, initialChecklist, initialDocuments, 
   async function completeChecklistItem(itemId: string) {
     const response = await fetch(`${getApiBaseUrl()}/re/deals/${dealId}/checklist-items/${itemId}/complete`, {
       method: "POST",
-      headers: headers()
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
     });
     if (!response.ok) {
       setStatus(`Complete failed (${response.status})`);
@@ -94,7 +98,8 @@ export function DealDetailConsole({ dealId, initialChecklist, initialDocuments, 
   async function addDocumentRequest() {
     const response = await fetch(`${getApiBaseUrl()}/re/deals/${dealId}/documents/request`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ doc_type: "inspection", requested_from: "client" })
     });
     if (!response.ok) {
@@ -108,7 +113,8 @@ export function DealDetailConsole({ dealId, initialChecklist, initialDocuments, 
   async function addCommunication() {
     const response = await fetch(`${getApiBaseUrl()}/re/deals/${dealId}/communications/log`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ channel: "note", direction: "outbound", subject: "Update", body_text: "Shared timeline with client." })
     });
     if (!response.ok) {
@@ -187,4 +193,3 @@ export function DealDetailConsole({ dealId, initialChecklist, initialDocuments, 
     </div>
   );
 }
-

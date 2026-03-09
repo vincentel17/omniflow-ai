@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../../lib/dev-context";
 
 type Props = {
   accountId: string;
@@ -14,57 +14,45 @@ export function IntegrationDiagnosticsClient({ accountId, provider, accountRef }
   const [status, setStatus] = useState<string | null>(null);
 
   async function syncGbpReviews() {
-    const context = getDevContext();
     const response = await fetch(`${getApiBaseUrl()}/connectors/accounts/${accountId}/sync`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
-      }
+        "Content-Type": "application/json"
+      },
+      credentials: "include",
     });
     setStatus(response.ok ? "GBP review sync queued." : `GBP sync failed (${response.status})`);
   }
 
   async function runHealthcheck() {
-    const context = getDevContext();
     const response = await fetch(`${getApiBaseUrl()}/connectors/accounts/${accountId}/healthcheck`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
-      }
+        "Content-Type": "application/json"
+      },
+      credentials: "include",
     });
     setStatus(response.ok ? "Healthcheck complete." : `Healthcheck failed (${response.status})`);
   }
 
   async function resetBreaker() {
-    const context = getDevContext();
     const response = await fetch(`${getApiBaseUrl()}/connectors/accounts/${accountId}/breaker/reset`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
-      }
+        "Content-Type": "application/json"
+      },
+      credentials: "include",
     });
     setStatus(response.ok ? "Breaker reset." : `Breaker reset failed (${response.status})`);
   }
 
   async function disconnect() {
-    const context = getDevContext();
     const response = await fetch(`${getApiBaseUrl()}/connectors/accounts/${accountId}/revoke`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
-      }
+        "Content-Type": "application/json"
+      },
+      credentials: "include",
     });
     setStatus(response.ok ? "Account disconnected." : `Disconnect failed (${response.status})`);
   }

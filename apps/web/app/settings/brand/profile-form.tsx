@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type BrandProfile = {
   brand_voice_json: Record<string, unknown>;
@@ -20,15 +20,12 @@ export function BrandProfileForm({ initial }: Props) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const context = getDevContext();
     const response = await fetch(`${getApiBaseUrl()}/brand/profile`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
+        "Content-Type": "application/json"
       },
+      credentials: "include",
       body: JSON.stringify({
         brand_voice_json: { tone },
         brand_assets_json: {},

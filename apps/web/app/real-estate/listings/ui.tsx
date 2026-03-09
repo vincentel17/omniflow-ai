@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type ListingPackage = {
   id: string;
@@ -16,22 +16,16 @@ type Props = {
   initialPackages: ListingPackage[];
 };
 
-function headers(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
-  };
-}
-
 export function ListingsConsole({ initialPackages }: Props) {
   const [packages, setPackages] = useState<ListingPackage[]>(initialPackages);
   const [status, setStatus] = useState<string | null>(null);
 
   async function refresh() {
-    const response = await fetch(`${getApiBaseUrl()}/re/listings/packages?limit=50&offset=0`, { headers: headers(), cache: "no-store" });
+    const response = await fetch(`${getApiBaseUrl()}/re/listings/packages?limit=50&offset=0`, {
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
     if (!response.ok) {
       setStatus(`Refresh failed (${response.status})`);
       return;
@@ -42,7 +36,8 @@ export function ListingsConsole({ initialPackages }: Props) {
   async function createPackage() {
     const response = await fetch(`${getApiBaseUrl()}/re/listings/packages`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
         property_address_json: { address: "200 Listing Ln", beds: 4, baths: 3, sqft: 2400 },
         key_features_json: ["Updated kitchen", "Large lot", "Natural light"]
@@ -57,7 +52,11 @@ export function ListingsConsole({ initialPackages }: Props) {
   }
 
   async function generatePackage(id: string) {
-    const response = await fetch(`${getApiBaseUrl()}/re/listings/packages/${id}/generate`, { method: "POST", headers: headers() });
+    const response = await fetch(`${getApiBaseUrl()}/re/listings/packages/${id}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
     if (!response.ok) {
       setStatus(`Generate failed (${response.status})`);
       return;
@@ -69,7 +68,8 @@ export function ListingsConsole({ initialPackages }: Props) {
   async function approvePackage(id: string) {
     const response = await fetch(`${getApiBaseUrl()}/re/listings/packages/${id}/approve`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ status: "approved", notes: "Approved from listing ops UI" })
     });
     if (!response.ok) {
@@ -81,7 +81,11 @@ export function ListingsConsole({ initialPackages }: Props) {
   }
 
   async function pushToContent(id: string) {
-    const response = await fetch(`${getApiBaseUrl()}/re/listings/packages/${id}/push-to-content-queue`, { method: "POST", headers: headers() });
+    const response = await fetch(`${getApiBaseUrl()}/re/listings/packages/${id}/push-to-content-queue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
     if (!response.ok) {
       setStatus(`Push failed (${response.status})`);
       return;
@@ -126,4 +130,3 @@ export function ListingsConsole({ initialPackages }: Props) {
     </div>
   );
 }
-

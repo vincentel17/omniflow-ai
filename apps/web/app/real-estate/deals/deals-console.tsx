@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type Deal = {
   id: string;
@@ -18,16 +18,6 @@ type Props = {
   initialDeals: Deal[];
 };
 
-function headers(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
-  };
-}
-
 export function DealsConsole({ initialDeals }: Props) {
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
   const [status, setStatus] = useState<string | null>(null);
@@ -37,7 +27,11 @@ export function DealsConsole({ initialDeals }: Props) {
   const [contactName, setContactName] = useState("Client Name");
 
   async function refresh() {
-    const response = await fetch(`${getApiBaseUrl()}/re/deals?limit=50&offset=0`, { headers: headers(), cache: "no-store" });
+    const response = await fetch(`${getApiBaseUrl()}/re/deals?limit=50&offset=0`, {
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
     if (!response.ok) {
       setStatus(`Refresh failed (${response.status})`);
       return;
@@ -48,7 +42,8 @@ export function DealsConsole({ initialDeals }: Props) {
   async function createDeal() {
     const response = await fetch(`${getApiBaseUrl()}/re/deals`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
         deal_type: dealType,
         pipeline_stage: stage,
@@ -100,4 +95,3 @@ export function DealsConsole({ initialDeals }: Props) {
     </div>
   );
 }
-

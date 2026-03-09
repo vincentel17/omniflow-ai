@@ -1,4 +1,4 @@
-import { getApiBaseUrl, getRequestDevContext } from "./dev-context";
+import { getApiBaseUrl } from "./dev-context";
 
 export type ApiMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
@@ -15,14 +15,10 @@ type FetchOptions = {
 };
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
-  const context = await getRequestDevContext();
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
-      "X-Omniflow-User-Id": context.userId,
-      "X-Omniflow-Org-Id": context.orgId,
-      "X-Omniflow-Role": context.role
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",

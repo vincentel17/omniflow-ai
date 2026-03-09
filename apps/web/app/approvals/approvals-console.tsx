@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type Approval = {
   id: string;
@@ -16,16 +16,6 @@ type Props = {
   initialApprovals: Approval[];
 };
 
-function headers(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role,
-  };
-}
-
 export function ApprovalsConsole({ initialApprovals }: Props) {
   const [approvals, setApprovals] = useState(initialApprovals);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -38,7 +28,7 @@ export function ApprovalsConsole({ initialApprovals }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/approvals/${approvalId}/${decision}`, {
         method: "POST",
-        headers: headers(),
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           notes: decision === "approve" ? "Approved from approvals queue" : "Rejected from approvals queue",

@@ -1,4 +1,4 @@
-import { getApiBaseUrl, getRequestDevContext } from "./dev-context";
+import { getApiBaseUrl } from "./dev-context";
 
 type CurrentPack = {
   pack_slug: string;
@@ -6,14 +6,11 @@ type CurrentPack = {
 
 export async function getCurrentPackSlug(): Promise<string | null> {
   try {
-    const context = await getRequestDevContext();
     const response = await fetch(`${getApiBaseUrl()}/verticals/current`, {
       headers: {
         "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
       },
+      credentials: "include",
       cache: "no-store",
       signal: AbortSignal.timeout(1000)
     });

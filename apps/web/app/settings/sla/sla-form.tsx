@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type SlaConfig = {
   response_time_minutes: number;
@@ -19,15 +19,12 @@ export function SlaForm({ initial }: Props) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const context = getDevContext();
     const response = await fetch(`${getApiBaseUrl()}/sla/config`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
+        "Content-Type": "application/json"
       },
+      credentials: "include",
       body: JSON.stringify({
         response_time_minutes: responseMinutes,
         escalation_minutes: escalationMinutes,

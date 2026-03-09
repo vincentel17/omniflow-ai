@@ -4,7 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 
 import { Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Select } from "../../../components/ui/primitives";
 import { useToast } from "../../../components/ui/toast";
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type Props = {
   initialSettings: {
@@ -32,15 +32,12 @@ export function IntegrationsClient({ initialSettings }: Props) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const context = getDevContext();
     const response = await fetch(`${getApiBaseUrl()}/ops/settings`, {
       method: "PATCH",
       headers: {
-        "Content-Type": "application/json",
-        "X-Omniflow-User-Id": context.userId,
-        "X-Omniflow-Org-Id": context.orgId,
-        "X-Omniflow-Role": context.role
+        "Content-Type": "application/json"
       },
+      credentials: "include",
       body: JSON.stringify({
         connector_mode: connectorMode,
         providers_enabled_json: providers

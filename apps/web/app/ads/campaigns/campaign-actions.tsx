@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type Props = {
   campaignId: string;
@@ -11,20 +11,10 @@ type Props = {
 
 type ActionType = "request-activation" | "activate" | "pause";
 
-function contextHeaders(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role,
-  };
-}
-
 async function postAction(campaignId: string, action: ActionType): Promise<Response> {
   return fetch(`${getApiBaseUrl()}/ads/campaigns/${campaignId}/${action}`, {
     method: "POST",
-    headers: contextHeaders(),
+    headers: { "Content-Type": "application/json" },
     credentials: "include",
   });
 }
@@ -92,4 +82,3 @@ export function CampaignActions({ campaignId, status }: Props) {
     </div>
   );
 }
-

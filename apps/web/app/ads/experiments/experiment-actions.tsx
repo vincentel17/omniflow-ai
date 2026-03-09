@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type Props = {
   experimentId: string;
@@ -10,16 +10,6 @@ type Props = {
 };
 
 type ActionType = "start" | "stop" | null;
-
-function contextHeaders(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role,
-  };
-}
 
 function actionForStatus(status: string): ActionType {
   const normalized = status.toLowerCase();
@@ -46,7 +36,7 @@ export function ExperimentActions({ experimentId, status }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/ads/experiments/${experimentId}/${action}`, {
         method: "POST",
-        headers: contextHeaders(),
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
       if (!response.ok) {
@@ -75,4 +65,3 @@ export function ExperimentActions({ experimentId, status }: Props) {
     </div>
   );
 }
-

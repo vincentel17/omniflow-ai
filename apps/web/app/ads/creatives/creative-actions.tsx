@@ -2,22 +2,12 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type Props = {
   creativeId: string;
   status: string;
 };
-
-function contextHeaders(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role,
-  };
-}
 
 export function CreativeActions({ creativeId, status }: Props) {
   const [pending, setPending] = useState(false);
@@ -33,7 +23,7 @@ export function CreativeActions({ creativeId, status }: Props) {
     try {
       const response = await fetch(`${getApiBaseUrl()}/ads/creatives/${creativeId}/approve`, {
         method: "POST",
-        headers: contextHeaders(),
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
       if (!response.ok) {
@@ -62,4 +52,3 @@ export function CreativeActions({ creativeId, status }: Props) {
     </div>
   );
 }
-

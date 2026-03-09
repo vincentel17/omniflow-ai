@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../lib/dev-context";
+import { getApiBaseUrl } from "../../lib/dev-context";
 
 type Session = {
   id: string;
@@ -24,23 +24,16 @@ const DEFAULT_STEPS = [
   "create_and_route_lead"
 ];
 
-function apiHeaders(): HeadersInit {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
-  };
-}
-
 export function OnboardingConsole() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   async function refreshStatus() {
-    const response = await fetch(`${getApiBaseUrl()}/onboarding/status`, { headers: apiHeaders() });
+    const response = await fetch(`${getApiBaseUrl()}/onboarding/status`, {
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
     if (!response.ok) {
       setMessage(`Failed to load onboarding status (${response.status})`);
       return;
@@ -53,7 +46,8 @@ export function OnboardingConsole() {
     setMessage(null);
     const response = await fetch(`${getApiBaseUrl()}/onboarding/start`, {
       method: "POST",
-      headers: apiHeaders()
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
     });
     setLoading(false);
     if (!response.ok) {
@@ -68,7 +62,8 @@ export function OnboardingConsole() {
     setMessage(null);
     const response = await fetch(`${getApiBaseUrl()}/onboarding/step/${stepId}/complete`, {
       method: "POST",
-      headers: apiHeaders(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ completed: true })
     });
     setLoading(false);

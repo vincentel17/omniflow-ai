@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getApiBaseUrl, getDevContext } from "../../../lib/dev-context";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 
 type CMAReport = {
   id: string;
@@ -16,22 +16,16 @@ type Props = {
   initialReports: CMAReport[];
 };
 
-function headers(): Record<string, string> {
-  const context = getDevContext();
-  return {
-    "Content-Type": "application/json",
-    "X-Omniflow-User-Id": context.userId,
-    "X-Omniflow-Org-Id": context.orgId,
-    "X-Omniflow-Role": context.role
-  };
-}
-
 export function CMAConsole({ initialReports }: Props) {
   const [reports, setReports] = useState<CMAReport[]>(initialReports);
   const [status, setStatus] = useState<string | null>(null);
 
   async function refresh() {
-    const response = await fetch(`${getApiBaseUrl()}/re/cma/reports?limit=50&offset=0`, { headers: headers(), cache: "no-store" });
+    const response = await fetch(`${getApiBaseUrl()}/re/cma/reports?limit=50&offset=0`, {
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
     if (!response.ok) {
       setStatus(`Refresh failed (${response.status})`);
       return;
@@ -42,7 +36,8 @@ export function CMAConsole({ initialReports }: Props) {
   async function createReport() {
     const response = await fetch(`${getApiBaseUrl()}/re/cma/reports`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
         subject_property_json: { address: "500 Sample St", beds: 3, baths: 2, sqft: 1800 }
       })
@@ -58,7 +53,8 @@ export function CMAConsole({ initialReports }: Props) {
   async function importComps(reportId: string) {
     const response = await fetch(`${getApiBaseUrl()}/re/cma/reports/${reportId}/comps/import`, {
       method: "POST",
-      headers: headers(),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
         comparables: [
           { address: "1 Comp St", status: "sold", sold_price: 420000, sqft: 1900 },
@@ -77,7 +73,8 @@ export function CMAConsole({ initialReports }: Props) {
   async function generate(reportId: string) {
     const response = await fetch(`${getApiBaseUrl()}/re/cma/reports/${reportId}/generate`, {
       method: "POST",
-      headers: headers()
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
     });
     if (!response.ok) {
       setStatus(`Generate failed (${response.status})`);
@@ -131,4 +128,3 @@ export function CMAConsole({ initialReports }: Props) {
     </div>
   );
 }
-
