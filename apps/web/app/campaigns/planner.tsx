@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type Campaign = {
   id: string;
@@ -42,7 +43,7 @@ export function CampaignPlanner({ campaigns }: Props) {
         objectives: ["Generate attributable pipeline"]
       });
       if (!response.ok) {
-        setStatus(`Create failed (${response.status})`);
+        setStatus(await readApiError(response, "Create failed"));
         return;
       }
       const created = (await response.json()) as Campaign;
@@ -61,7 +62,7 @@ export function CampaignPlanner({ campaigns }: Props) {
     try {
       const response = await apiPost(`/campaigns/${campaignId}/generate-content`, {});
       if (!response.ok) {
-        setStatus(`Generate failed (${response.status})`);
+        setStatus(await readApiError(response, "Generate failed"));
         return;
       }
       setStatus("Content generated.");
@@ -78,7 +79,7 @@ export function CampaignPlanner({ campaigns }: Props) {
     try {
       const response = await apiPost(`/campaigns/${campaignId}/approve`, { status: "approved", notes: "UI approval" });
       if (!response.ok) {
-        setStatus(`Approve failed (${response.status})`);
+        setStatus(await readApiError(response, "Approve failed"));
         return;
       }
       setItems((current) =>

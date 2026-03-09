@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type AuditRun = {
   id: string;
@@ -56,8 +57,8 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
         fetch(`${getApiBaseUrl()}/presence/tasks?limit=20&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" })
       ]);
       if (!latestRes.ok || !findingsRes.ok || !tasksRes.ok) {
-        const codes = [latestRes.status, findingsRes.status, tasksRes.status].join("/");
-        setStatus(`Refresh failed (${codes})`);
+        const firstError = !latestRes.ok ? latestRes : !findingsRes.ok ? findingsRes : tasksRes;
+        setStatus(await readApiError(firstError, "Refresh failed"));
         return;
       }
       setLatest((await latestRes.json()) as AuditRun | null);
@@ -85,7 +86,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
         })
       });
       if (!response.ok) {
-        setStatus(`Audit failed (${response.status})`);
+        setStatus(await readApiError(response, "Audit failed"));
         return;
       }
       setStatus("Presence audit completed.");
@@ -108,7 +109,7 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
         body: JSON.stringify({ status: "done" })
       });
       if (!response.ok) {
-        setStatus(`Update failed (${response.status})`);
+        setStatus(await readApiError(response, "Update failed"));
         return;
       }
       setStatus("Finding updated.");

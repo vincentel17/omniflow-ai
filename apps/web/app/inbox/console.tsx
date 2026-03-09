@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type Thread = {
   id: string;
@@ -51,7 +52,7 @@ export function InboxConsole({ initialThreads }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Refresh failed (${response.status})`);
+        setStatus(await readApiError(response, "Refresh failed"));
         return;
       }
       const data = (await response.json()) as Thread[];
@@ -74,7 +75,7 @@ export function InboxConsole({ initialThreads }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Load messages failed (${response.status})`);
+        setStatus(await readApiError(response, "Load messages failed"));
         return;
       }
       setMessages((await response.json()) as Message[]);
@@ -116,7 +117,7 @@ export function InboxConsole({ initialThreads }: Props) {
         })
       });
       if (!response.ok) {
-        setStatus(`Ingest failed (${response.status})`);
+        setStatus(await readApiError(response, "Ingest failed"));
         return;
       }
       setStatus("Mock inbound ingested.");
@@ -139,7 +140,7 @@ export function InboxConsole({ initialThreads }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Suggest failed (${response.status})`);
+        setStatus(await readApiError(response, "Suggest failed"));
         return;
       }
       const payload = (await response.json()) as { reply_text: string };
@@ -164,7 +165,7 @@ export function InboxConsole({ initialThreads }: Props) {
         body: JSON.stringify({ body_text: draftText || "Thanks, we will follow up shortly." })
       });
       if (!response.ok) {
-        setStatus(`Draft failed (${response.status})`);
+        setStatus(await readApiError(response, "Draft failed"));
         return;
       }
       setStatus("Draft reply saved.");
@@ -187,7 +188,7 @@ export function InboxConsole({ initialThreads }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Lead creation failed (${response.status})`);
+        setStatus(await readApiError(response, "Lead creation failed"));
         return;
       }
       setStatus("Lead created from thread.");
@@ -210,7 +211,7 @@ export function InboxConsole({ initialThreads }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Close failed (${response.status})`);
+        setStatus(await readApiError(response, "Close failed"));
         return;
       }
       setStatus("Thread closed.");

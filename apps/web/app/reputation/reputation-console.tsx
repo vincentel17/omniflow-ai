@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type Review = {
   id: string;
@@ -47,7 +48,8 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         fetch(`${getApiBaseUrl()}/reputation/campaigns?limit=50&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" })
       ]);
       if (!reviewsRes.ok || !campaignsRes.ok) {
-        setStatus(`Refresh failed (${reviewsRes.status}/${campaignsRes.status})`);
+        const firstError = !reviewsRes.ok ? reviewsRes : campaignsRes;
+        setStatus(await readApiError(firstError, "Refresh failed"));
         return;
       }
       setReviews((await reviewsRes.json()) as Review[]);
@@ -79,7 +81,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         })
       });
       if (!response.ok) {
-        setStatus(`Import failed (${response.status})`);
+        setStatus(await readApiError(response, "Import failed"));
         return;
       }
       setStatus("Review imported.");
@@ -101,7 +103,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Draft failed (${response.status})`);
+        setStatus(await readApiError(response, "Draft failed"));
         return;
       }
       const payload = (await response.json()) as { response_text: string };
@@ -130,7 +132,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         })
       });
       if (!response.ok) {
-        setStatus(`Campaign create failed (${response.status})`);
+        setStatus(await readApiError(response, "Campaign create failed"));
         return;
       }
       const campaign = (await response.json()) as Campaign;
@@ -140,7 +142,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         credentials: "include"
       });
       if (!start.ok) {
-        setStatus(`Campaign start failed (${start.status})`);
+        setStatus(await readApiError(start, "Campaign start failed"));
         return;
       }
       setStatus("Campaign started and tasks created.");

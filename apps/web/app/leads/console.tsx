@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type Lead = {
   id: string;
@@ -64,7 +65,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         credentials: "include",
       });
       if (!response.ok) {
-        setStatus(`Refresh failed (${response.status})`);
+        setStatus(await readApiError(response, "Refresh failed"));
         return;
       }
       setLeads((await response.json()) as Lead[]);
@@ -116,7 +117,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         credentials: "include",
       });
       if (!response.ok) {
-        setStatus(`Score failed (${response.status})`);
+        setStatus(await readApiError(response, "Score failed"));
         return;
       }
       setScore((await response.json()) as Score);
@@ -139,7 +140,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         credentials: "include",
       });
       if (!response.ok) {
-        setStatus(`Route failed (${response.status})`);
+        setStatus(await readApiError(response, "Route failed"));
         return;
       }
       setAssignment((await response.json()) as Assignment);
@@ -163,7 +164,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         credentials: "include",
       });
       if (!suggest.ok) {
-        setStatus(`Suggest nurture failed (${suggest.status})`);
+        setStatus(await readApiError(suggest, "Suggest nurture failed"));
         return;
       }
       const plan = (await suggest.json()) as { tasks: Array<Record<string, unknown>> };
@@ -174,7 +175,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         credentials: "include",
       });
       if (!apply.ok) {
-        setStatus(`Apply nurture failed (${apply.status})`);
+        setStatus(await readApiError(apply, "Apply nurture failed"));
         return;
       }
       setStatus("Nurture tasks applied.");
@@ -198,7 +199,7 @@ export function LeadsConsole({ initialLeads }: Props) {
         credentials: "include",
       });
       if (!response.ok) {
-        setStatus(`Task update failed (${response.status})`);
+        setStatus(await readApiError(response, "Task update failed"));
         return;
       }
       setStatus("Task marked done.");

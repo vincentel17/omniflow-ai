@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type WorkItem = {
   id: string;
@@ -38,7 +39,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         cache: "no-store"
       });
       if (!response.ok) {
-        setStatus(`Refresh failed (${response.status})`);
+        setStatus(await readApiError(response, "Refresh failed"));
         return;
       }
       setWorkItems((await response.json()) as WorkItem[]);
@@ -60,7 +61,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         body: JSON.stringify({ target_locations: ["seattle"] })
       });
       if (!response.ok) {
-        setStatus(`Plan failed (${response.status})`);
+        setStatus(await readApiError(response, "Plan failed"));
         return;
       }
       const payload = (await response.json()) as { service_pages: Array<{ keyword: string; slug: string }> };
@@ -82,7 +83,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         })
       });
       if (!create.ok) {
-        setStatus(`Create failed (${create.status})`);
+        setStatus(await readApiError(create, "Create failed"));
         return;
       }
       setStatus("SEO plan generated and work item created.");
@@ -104,7 +105,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         credentials: "include"
       });
       if (!response.ok) {
-        setStatus(`Generate failed (${response.status})`);
+        setStatus(await readApiError(response, "Generate failed"));
         return;
       }
       setStatus("SEO content generated.");
@@ -127,7 +128,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         body: JSON.stringify({ status: "approved" })
       });
       if (!response.ok) {
-        setStatus(`Approve failed (${response.status})`);
+        setStatus(await readApiError(response, "Approve failed"));
         return;
       }
       setStatus("SEO work item approved.");

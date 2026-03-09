@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
+import { readApiError } from "../../lib/http";
 
 type ContentItem = {
   id: string;
@@ -68,7 +69,7 @@ export function ContentQueue({ items }: Props) {
     try {
       const response = await apiPost(`/content/${contentId}/approve`, { status: "approved", notes: "Approved in UI" });
       if (!response.ok) {
-        setStatus(`Approve failed (${response.status})`);
+        setStatus(await readApiError(response, "Approve failed"));
         return;
       }
       setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "approved" } : item)));
@@ -90,7 +91,7 @@ export function ContentQueue({ items }: Props) {
         schedule_at: null
       });
       if (!response.ok) {
-        setStatus(`Schedule failed (${response.status})`);
+        setStatus(await readApiError(response, "Schedule failed"));
         return;
       }
       setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "scheduled" } : item)));
