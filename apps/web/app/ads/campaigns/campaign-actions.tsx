@@ -75,7 +75,7 @@ export function CampaignActions({ campaignId, status }: Props) {
 
   return (
     <div className="space-y-2">
-      <button className="btn btn-secondary btn-sm" disabled={pending} onClick={() => void onExecute()} type="button">
+      <button className="btn btn-secondary btn-sm" data-testid={`ads-campaign-action-${campaignId}`} disabled={pending} onClick={() => void onExecute()} type="button">
         {pending ? "Working..." : actionLabel(action)}
       </button>
       {message ? <p className="text-xs text-[rgb(var(--muted-foreground))]">{message}</p> : null}

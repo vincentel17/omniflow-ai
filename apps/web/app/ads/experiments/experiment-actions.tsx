@@ -58,7 +58,7 @@ export function ExperimentActions({ experimentId, status }: Props) {
 
   return (
     <div className="space-y-2">
-      <button className="btn btn-secondary btn-sm" disabled={pending} onClick={() => void onExecute()} type="button">
+      <button className="btn btn-secondary btn-sm" data-testid={`ads-experiment-action-${experimentId}`} disabled={pending} onClick={() => void onExecute()} type="button">
         {pending ? "Working..." : action === "start" ? "Start" : "Stop"}
       </button>
       {message ? <p className="text-xs text-[rgb(var(--muted-foreground))]">{message}</p> : null}

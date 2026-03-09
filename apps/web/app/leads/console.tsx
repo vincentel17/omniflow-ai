@@ -221,6 +221,7 @@ export function LeadsConsole({ initialLeads }: Props) {
             <li className="rounded border border-slate-800 p-3" key={lead.id}>
               <button
                 className="w-full text-left"
+                data-testid={leads[0]?.id === lead.id ? "lead-open-first" : `lead-open-${lead.id}`}
                 onClick={() => {
                   setSelectedLeadId(lead.id);
                   void loadTasks(lead.id);
@@ -284,6 +285,7 @@ export function LeadsConsole({ initialLeads }: Props) {
                     {task.status !== "done" ? (
                       <button
                         className="rounded bg-slate-700 px-2 py-1 text-xs"
+                        data-testid={`lead-task-done-${task.id}`}
                         disabled={pendingAction !== null}
                         onClick={() => markTaskDone(task.id)}
                         type="button"

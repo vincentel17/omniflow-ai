@@ -229,7 +229,7 @@ export function InboxConsole({ initialThreads }: Props) {
           <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="inbox-ingest-mock" disabled={pendingAction !== null} onClick={ingestMock} type="button">
             {pendingAction === "ingest" ? "Ingesting..." : "Ingest Mock"}
           </button>
-          <button className="rounded bg-slate-700 px-3 py-1 text-sm" disabled={pendingAction !== null} onClick={refreshThreads} type="button">
+          <button className="rounded bg-slate-700 px-3 py-1 text-sm" data-testid="inbox-refresh" disabled={pendingAction !== null} onClick={refreshThreads} type="button">
             {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
           </button>
         </div>
@@ -238,7 +238,7 @@ export function InboxConsole({ initialThreads }: Props) {
             <li className="rounded border border-slate-800 p-3" key={thread.id}>
               <button
                 className="w-full text-left"
-                data-testid={threads[0]?.id === thread.id ? "tour-inbox-open-thread" : undefined}
+                data-testid={threads[0]?.id === thread.id ? "tour-inbox-open-thread" : `inbox-open-thread-${thread.id}`}
                 onClick={() => loadMessages(thread.id)}
                 type="button"
               >

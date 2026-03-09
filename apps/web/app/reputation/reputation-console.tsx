@@ -47,7 +47,7 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
         fetch(`${getApiBaseUrl()}/reputation/campaigns?limit=50&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" })
       ]);
       if (!reviewsRes.ok || !campaignsRes.ok) {
-        setStatus("Refresh failed.");
+        setStatus(`Refresh failed (${reviewsRes.status}/${campaignsRes.status})`);
         return;
       }
       setReviews((await reviewsRes.json()) as Review[]);
@@ -173,6 +173,15 @@ export function ReputationConsole({ initialReviews, initialCampaigns }: Props) {
             type="button"
           >
             {pendingAction === "campaign" ? "Starting..." : "Create + Start Campaign"}
+          </button>
+          <button
+            className="rounded bg-slate-700 px-3 py-1 text-sm"
+            data-testid="reputation-refresh"
+            disabled={pendingAction !== null}
+            onClick={refresh}
+            type="button"
+          >
+            {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </section>

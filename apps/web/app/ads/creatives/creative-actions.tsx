@@ -45,7 +45,7 @@ export function CreativeActions({ creativeId, status }: Props) {
 
   return (
     <div className="space-y-2">
-      <button className="btn btn-secondary btn-sm" disabled={pending} onClick={() => void onApprove()} type="button">
+      <button className="btn btn-secondary btn-sm" data-testid={`ads-creative-approve-${creativeId}`} disabled={pending} onClick={() => void onApprove()} type="button">
         {pending ? "Approving..." : "Approve"}
       </button>
       {message ? <p className="text-xs text-[rgb(var(--muted-foreground))]">{message}</p> : null}

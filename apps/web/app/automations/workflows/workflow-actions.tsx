@@ -68,10 +68,10 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <button className="btn btn-secondary btn-sm" disabled={pending !== null} onClick={() => void onToggle()} type="button">
+        <button className="btn btn-secondary btn-sm" data-testid={`workflow-toggle-${workflowId}`} disabled={pending !== null} onClick={() => void onToggle()} type="button">
           {pending === "toggle" ? "Saving..." : enabled ? "Disable" : "Enable"}
         </button>
-        <button className="btn btn-secondary btn-sm" disabled={pending !== null} onClick={() => void onDryRun()} type="button">
+        <button className="btn btn-secondary btn-sm" data-testid={`workflow-dryrun-${workflowId}`} disabled={pending !== null} onClick={() => void onDryRun()} type="button">
           {pending === "test" ? "Testing..." : "Dry Run"}
         </button>
       </div>

@@ -56,7 +56,8 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
         fetch(`${getApiBaseUrl()}/presence/tasks?limit=20&offset=0`, { headers: headers(), cache: "no-store", credentials: "include" })
       ]);
       if (!latestRes.ok || !findingsRes.ok || !tasksRes.ok) {
-        setStatus("Refresh failed.");
+        const codes = [latestRes.status, findingsRes.status, tasksRes.status].join("/");
+        setStatus(`Refresh failed (${codes})`);
         return;
       }
       setLatest((await latestRes.json()) as AuditRun | null);
@@ -124,6 +125,9 @@ export function PresenceConsole({ initialLatest, initialFindings, initialTasks }
       <section className="rounded border border-slate-800 p-4">
         <button className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900" data-testid="tour-presence-run" disabled={pendingAction !== null} onClick={runAudit} type="button">
           {pendingAction === "audit" ? "Running..." : "Run Presence Audit"}
+        </button>
+        <button className="ml-2 rounded bg-slate-700 px-3 py-1 text-sm" data-testid="presence-refresh" disabled={pendingAction !== null} onClick={refresh} type="button">
+          {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
         </button>
         {latest ? (
           <p className="mt-3 text-sm text-slate-300">

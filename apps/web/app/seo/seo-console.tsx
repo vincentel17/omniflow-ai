@@ -38,7 +38,7 @@ export function SEOConsole({ initialWorkItems }: Props) {
         cache: "no-store"
       });
       if (!response.ok) {
-        setStatus("Refresh failed.");
+        setStatus(`Refresh failed (${response.status})`);
         return;
       }
       setWorkItems((await response.json()) as WorkItem[]);
@@ -150,6 +150,15 @@ export function SEOConsole({ initialWorkItems }: Props) {
           type="button"
         >
           {pendingAction === "plan" ? "Generating..." : "Generate SEO Plan"}
+        </button>
+        <button
+          className="ml-2 rounded bg-slate-700 px-3 py-1 text-sm"
+          data-testid="seo-refresh"
+          disabled={pendingAction !== null}
+          onClick={refresh}
+          type="button"
+        >
+          {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
         </button>
       </section>
       <section className="rounded border border-slate-800 p-4">
