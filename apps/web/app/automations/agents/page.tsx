@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 
-import { getAgentContext, listAgentDefinitions, listAgentRuns, runAgents, updateAgentDefinition } from "../../../lib/api";
+import { getAgentContext, listAgentDefinitions, listAgentRuns } from "../../../lib/api";
 import { Badge, ButtonGhost, Card, CardContent, CardHeader, CardTitle, EmptyState } from "../../../components/ui/primitives";
+import { AgentsPageActions, AgentToggleButton } from "./page-actions";
 
 function toneForStatus(status: string): "neutral" | "success" | "warn" | "danger" | "info" {
   if (status === "succeeded") {
@@ -18,24 +18,6 @@ function toneForStatus(status: string): "neutral" | "success" | "warn" | "danger
     return "warn";
   }
   return "neutral";
-}
-
-async function runNowAction() {
-  "use server";
-  await runAgents("manual");
-  revalidatePath("/automations/agents");
-  revalidatePath("/automations/agents/runs");
-}
-
-async function toggleDefinitionAction(formData: FormData) {
-  "use server";
-  const name = String(formData.get("name") ?? "").trim();
-  const nextEnabled = String(formData.get("enabled") ?? "false") === "true";
-  if (!name) {
-    return;
-  }
-  await updateAgentDefinition(name, nextEnabled);
-  revalidatePath("/automations/agents");
 }
 
 export default async function AgentsPage() {
@@ -81,9 +63,7 @@ export default async function AgentsPage() {
             <CardTitle>Actions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            <form action={runNowAction}>
-              <ButtonGhost className="w-full" data-testid="tour-agent-run" type="submit">Run Agents Now</ButtonGhost>
-            </form>
+            <AgentsPageActions />
             <Link href="/automations/agents/runs" className="inline-flex w-full">
               <ButtonGhost className="w-full">View Agent Runs</ButtonGhost>
             </Link>
@@ -109,11 +89,7 @@ export default async function AgentsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge tone={definition.enabled ? "success" : "neutral"}>{definition.enabled ? "enabled" : "disabled"}</Badge>
-                    <form action={toggleDefinitionAction}>
-                      <input type="hidden" name="name" value={definition.name} />
-                      <input type="hidden" name="enabled" value={String(nextEnabled)} />
-                      <ButtonGhost type="submit">{nextEnabled ? "Enable" : "Disable"}</ButtonGhost>
-                    </form>
+                    <AgentToggleButton name={definition.name} nextEnabled={nextEnabled} />
                   </div>
                 </div>
               );

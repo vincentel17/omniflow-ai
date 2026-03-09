@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { apiFetch } from "../../../../lib/api";
+import { requireAuthSession } from "../../../../lib/server-auth";
 
 type WorkflowRunDetail = {
   id: string;
@@ -18,6 +19,7 @@ type WorkflowRunDetailPageProps = {
 };
 
 export default async function WorkflowRunDetailPage({ params }: WorkflowRunDetailPageProps) {
+  await requireAuthSession();
   const { id } = await params;
   let run: WorkflowRunDetail | null = null;
 

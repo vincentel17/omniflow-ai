@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 
-import { approveApproval, executeAgentRun, getAgentRun, listApprovals, rejectApproval } from "../../../../../lib/api";
-import { Badge, Button, ButtonGhost, Card, CardContent, CardHeader, CardTitle } from "../../../../../components/ui/primitives";
+import { getAgentRun, listApprovals } from "../../../../../lib/api";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "../../../../../components/ui/primitives";
+import { AgentRunActions } from "./run-actions";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -36,28 +36,6 @@ export default async function AgentRunDetailPage({ params }: PageProps) {
   const relatedApprovals = approvals.filter(
     (item) => (item.entity_type === "agent_run" || item.entity_type === "agent_plan") && item.entity_id === run.id,
   );
-
-  async function approveAction(formData: FormData): Promise<void> {
-    "use server";
-    const approvalId = String(formData.get("approvalId") ?? "");
-    if (!approvalId) return;
-    await approveApproval(approvalId);
-    revalidatePath(`/automations/agents/runs/${id}`);
-  }
-
-  async function rejectAction(formData: FormData): Promise<void> {
-    "use server";
-    const approvalId = String(formData.get("approvalId") ?? "");
-    if (!approvalId) return;
-    await rejectApproval(approvalId);
-    revalidatePath(`/automations/agents/runs/${id}`);
-  }
-
-  async function executeAction(): Promise<void> {
-    "use server";
-    await executeAgentRun(id);
-    revalidatePath(`/automations/agents/runs/${id}`);
-  }
 
   const planSteps = Array.isArray((run.plan_json as { steps?: unknown[] }).steps)
     ? ((run.plan_json as { steps: Array<Record<string, unknown>> }).steps ?? [])
@@ -101,9 +79,7 @@ export default async function AgentRunDetailPage({ params }: PageProps) {
             <CardTitle>Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <form action={executeAction}>
-              <Button type="submit">Execute Run</Button>
-            </form>
+            <AgentRunActions runId={id} />
             <Link className="text-[rgb(var(--primary))] underline" href="/automations/agents/runs">
               Back to runs
             </Link>
@@ -143,14 +119,7 @@ export default async function AgentRunDetailPage({ params }: PageProps) {
                 <p className="font-mono text-xs">{approval.id}</p>
                 <p className="text-[rgb(var(--muted-foreground))]">Entity: {approval.entity_type}</p>
                 <div className="mt-3 flex gap-2">
-                  <form action={approveAction}>
-                    <input name="approvalId" type="hidden" value={approval.id} />
-                    <Button type="submit">Approve</Button>
-                  </form>
-                  <form action={rejectAction}>
-                    <input name="approvalId" type="hidden" value={approval.id} />
-                    <ButtonGhost type="submit">Reject</ButtonGhost>
-                  </form>
+                  <AgentRunActions approvalId={approval.id} runId={id} />
                 </div>
               </div>
             ))}

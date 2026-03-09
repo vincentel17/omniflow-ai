@@ -1,9 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { getApiBaseUrl } from "../../lib/dev-context";
-import { readApiError } from "../../lib/http";
+import { approveApproval, type ApiError, rejectApproval } from "../../lib/api";
 
 type Approval = {
   id: string;
@@ -18,6 +18,7 @@ type Props = {
 };
 
 export function ApprovalsConsole({ initialApprovals }: Props) {
+  const router = useRouter();
   const [approvals, setApprovals] = useState(initialApprovals);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -27,23 +28,17 @@ export function ApprovalsConsole({ initialApprovals }: Props) {
     setPendingId(approvalId);
     setStatus(null);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/approvals/${approvalId}/${decision}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          notes: decision === "approve" ? "Approved from approvals queue" : "Rejected from approvals queue",
-        }),
-      });
-      if (!response.ok) {
-        setStatus(await readApiError(response, decision === "approve" ? "Approve failed" : "Reject failed"));
-        return;
-      }
-      const updated = (await response.json()) as Approval;
+      const notes = decision === "approve" ? "Approved from approvals queue" : "Rejected from approvals queue";
+      const updated = decision === "approve" ? await approveApproval(approvalId, notes) : await rejectApproval(approvalId, notes);
       setApprovals((current) => current.map((item) => (item.id === approvalId ? updated : item)));
       setStatus(decision === "approve" ? "Approval granted." : "Approval rejected.");
-    } catch {
-      setStatus(`${decision === "approve" ? "Approve" : "Reject"} failed (network error).`);
+      router.refresh();
+    } catch (error) {
+      if (isApiError(error)) {
+        setStatus(error.message);
+      } else {
+        setStatus(`${decision === "approve" ? "Approve" : "Reject"} failed (network error).`);
+      }
     } finally {
       setPendingId(null);
     }
@@ -103,4 +98,8 @@ export function ApprovalsConsole({ initialApprovals }: Props) {
       </table>
     </div>
   );
+}
+
+function isApiError(error: unknown): error is ApiError {
+  return typeof error === "object" && error !== null && "status" in error && "message" in error;
 }

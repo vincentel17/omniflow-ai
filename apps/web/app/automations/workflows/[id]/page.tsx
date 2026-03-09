@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { apiFetch } from "../../../../lib/api";
+import { requireAuthSession } from "../../../../lib/server-auth";
 import { WorkflowActions } from "../workflow-actions";
 
 type WorkflowDefinition = {
@@ -25,6 +26,7 @@ const triggerLabel: Record<string, string> = {
 };
 
 export default async function WorkflowDetailPage({ params }: WorkflowDetailPageProps) {
+  await requireAuthSession();
   const { id } = await params;
   let workflow: WorkflowDefinition | null = null;
 

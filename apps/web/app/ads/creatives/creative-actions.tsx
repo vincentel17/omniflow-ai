@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { getApiBaseUrl } from "../../../lib/dev-context";
 import { readApiError } from "../../../lib/http";
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export function CreativeActions({ creativeId, status }: Props) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const approved = status.toLowerCase() === "approved";
@@ -31,8 +33,8 @@ export function CreativeActions({ creativeId, status }: Props) {
         setMessage(await readApiError(response, "Approve failed"));
         return;
       }
-      setMessage("Approved. Refreshing...");
-      window.location.reload();
+      setMessage("Approved.");
+      router.refresh();
     } catch {
       setMessage("Approve failed (network error).");
     } finally {

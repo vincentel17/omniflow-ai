@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { getApiBaseUrl } from "../../../lib/dev-context";
 import { readApiError } from "../../../lib/http";
@@ -45,6 +46,7 @@ function actionLabel(action: ActionType): string {
 }
 
 export function CampaignActions({ campaignId, status }: Props) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const action = actionForStatus(status);
@@ -61,8 +63,8 @@ export function CampaignActions({ campaignId, status }: Props) {
         setMessage(await readApiError(response, "Action failed"));
         return;
       }
-      setMessage("Updated. Refreshing...");
-      window.location.reload();
+      setMessage("Updated.");
+      router.refresh();
     } catch {
       setMessage("Action failed (network error).");
     } finally {

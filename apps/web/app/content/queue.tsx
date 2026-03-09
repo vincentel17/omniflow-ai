@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getApiBaseUrl } from "../../lib/dev-context";
 import { readApiError } from "../../lib/http";
@@ -38,7 +38,15 @@ async function apiGet(path: string): Promise<Response> {
 export function ContentQueue({ items }: Props) {
   const [contentItems, setContentItems] = useState(items);
   const [status, setStatus] = useState<string | null>(null);
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  const refreshItems = useCallback(async () => {
+    const response = await apiGet("/content?limit=50&offset=0");
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Refresh failed"));
+    }
+    setContentItems((await response.json()) as ContentItem[]);
+  }, []);
 
   useEffect(() => {
     if (contentItems.length > 0) {
@@ -46,25 +54,25 @@ export function ContentQueue({ items }: Props) {
     }
 
     let cancelled = false;
-    void apiGet("/content?limit=50&offset=0")
-      .then(async (response) => {
-        if (!response.ok || cancelled) {
-          return;
-        }
-        const payload = (await response.json()) as ContentItem[];
+    void refreshItems()
+      .then(() => {
         if (!cancelled) {
-          setContentItems(payload);
+          setStatus(null);
         }
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setStatus(error instanceof Error ? error.message : "Refresh failed.");
+        }
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [contentItems.length]);
+  }, [contentItems.length, refreshItems]);
 
   async function approve(contentId: string) {
-    setPendingId(contentId);
+    setPendingAction(`approve-${contentId}`);
     setStatus(null);
     try {
       const response = await apiPost(`/content/${contentId}/approve`, { status: "approved", notes: "Approved in UI" });
@@ -72,17 +80,17 @@ export function ContentQueue({ items }: Props) {
         setStatus(await readApiError(response, "Approve failed"));
         return;
       }
-      setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "approved" } : item)));
+      await refreshItems();
       setStatus("Content approved.");
     } catch {
       setStatus("Approve failed (network error).");
     } finally {
-      setPendingId(null);
+      setPendingAction(null);
     }
   }
 
   async function schedule(contentId: string) {
-    setPendingId(contentId);
+    setPendingAction(`schedule-${contentId}`);
     setStatus(null);
     try {
       const response = await apiPost(`/content/${contentId}/schedule`, {
@@ -94,18 +102,32 @@ export function ContentQueue({ items }: Props) {
         setStatus(await readApiError(response, "Schedule failed"));
         return;
       }
-      setContentItems((current) => current.map((item) => (item.id === contentId ? { ...item, status: "scheduled" } : item)));
+      await refreshItems();
       setStatus("Publish job queued.");
     } catch {
       setStatus("Schedule failed (network error).");
     } finally {
-      setPendingId(null);
+      setPendingAction(null);
     }
   }
 
   return (
     <div className="mt-6 space-y-4">
       {status ? <p className="text-sm text-slate-300" data-testid="content-status-message">{status}</p> : null}
+      <button
+        className="rounded bg-slate-700 px-3 py-1 text-sm"
+        data-testid="content-refresh"
+        disabled={pendingAction !== null}
+        onClick={() => {
+          setPendingAction("refresh");
+          void refreshItems()
+            .catch((error: unknown) => setStatus(error instanceof Error ? error.message : "Refresh failed."))
+            .finally(() => setPendingAction(null));
+        }}
+        type="button"
+      >
+        {pendingAction === "refresh" ? "Refreshing..." : "Refresh"}
+      </button>
       <ul className="space-y-3" data-testid="content-list">
         {contentItems.map((item) => (
           <li className="rounded border border-slate-800 p-3" data-testid={`content-row-${item.id}`} key={item.id}>
@@ -116,24 +138,35 @@ export function ContentQueue({ items }: Props) {
               <p className="text-sm text-amber-300">Warnings: {item.policy_warnings_json.join(", ")}</p>
             ) : null}
             <div className="mt-3 flex gap-2">
-              <button
-                className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900"
-                data-testid={contentItems[0]?.id === item.id ? "tour-drafts-approve" : `content-approve-${item.id}`}
-                onClick={() => approve(item.id)}
-                disabled={pendingId === item.id}
-                type="button"
-              >
-                {pendingId === item.id ? "Approving..." : "Approve"}
-              </button>
-              <button
-                className="rounded bg-slate-700 px-3 py-1 text-sm"
-                data-testid={contentItems[0]?.id === item.id ? "tour-publish-schedule" : `content-schedule-${item.id}`}
-                onClick={() => schedule(item.id)}
-                disabled={pendingId === item.id}
-                type="button"
-              >
-                {pendingId === item.id ? "Scheduling..." : "Schedule"}
-              </button>
+              {(() => {
+                const normalized = item.status.toLowerCase();
+                const approveDisabled = normalized !== "draft" && normalized !== "pending_approval";
+                const scheduleDisabled = normalized !== "approved";
+                const approving = pendingAction === `approve-${item.id}`;
+                const scheduling = pendingAction === `schedule-${item.id}`;
+                return (
+                  <>
+                    <button
+                      className="rounded bg-slate-200 px-3 py-1 text-sm text-slate-900 disabled:opacity-50"
+                      data-testid={contentItems[0]?.id === item.id ? "tour-drafts-approve" : `content-approve-${item.id}`}
+                      onClick={() => approve(item.id)}
+                      disabled={approveDisabled || pendingAction !== null}
+                      type="button"
+                    >
+                      {approving ? "Approving..." : "Approve"}
+                    </button>
+                    <button
+                      className="rounded bg-slate-700 px-3 py-1 text-sm disabled:opacity-50"
+                      data-testid={contentItems[0]?.id === item.id ? "tour-publish-schedule" : `content-schedule-${item.id}`}
+                      onClick={() => schedule(item.id)}
+                      disabled={scheduleDisabled || pendingAction !== null}
+                      type="button"
+                    >
+                      {scheduling ? "Scheduling..." : "Schedule"}
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </li>
         ))}

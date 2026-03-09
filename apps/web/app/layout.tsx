@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "../components/app-shell";
 import { ToastProvider } from "../components/ui/toast";
 import { getRequestSessionContext } from "../lib/dev-context";
-import { getCurrentPackSlug } from "../lib/vertical-pack";
+import { getCurrentPackSlugForSession } from "../lib/vertical-pack";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -26,7 +26,7 @@ function envLabel(): string {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const session = await getRequestSessionContext();
-  const packSlug = await getCurrentPackSlug();
+  const packSlug = await getCurrentPackSlugForSession(session);
   const isRealEstate = packSlug === "real-estate";
   const effectiveOrgName = session?.org_id ?? "unauthenticated";
   const effectiveRole = session?.role ?? "guest";

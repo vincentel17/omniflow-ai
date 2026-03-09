@@ -1,9 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { getApiBaseUrl } from "../../../lib/dev-context";
-import { readApiError } from "../../../lib/http";
+import { apiFetch, type ApiError } from "../../../lib/api";
 
 type Props = {
   workflowId: string;
@@ -11,6 +11,7 @@ type Props = {
 };
 
 export function WorkflowActions({ workflowId, enabled }: Props) {
+  const router = useRouter();
   const [pending, setPending] = useState<"toggle" | "test" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -18,20 +19,18 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
     setPending("toggle");
     setMessage(null);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/workflows/${workflowId}`, {
+      await apiFetch(`/workflows/${workflowId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ enabled: !enabled }),
+        body: { enabled: !enabled },
       });
-      if (!response.ok) {
-        setMessage(await readApiError(response, "Toggle failed"));
-        return;
+      setMessage("Workflow updated.");
+      router.refresh();
+    } catch (error) {
+      if (isApiError(error)) {
+        setMessage(error.message);
+      } else {
+        setMessage("Toggle failed (network error).");
       }
-      setMessage("Workflow updated. Refreshing...");
-      window.location.reload();
-    } catch {
-      setMessage("Toggle failed (network error).");
     } finally {
       setPending(null);
     }
@@ -41,26 +40,23 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
     setPending("test");
     setMessage(null);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/workflows/${workflowId}/test`, {
+      const payload = await apiFetch<{ matched: boolean; actions?: unknown[] }>(`/workflows/${workflowId}/test`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
+        body: {
           event_type: "WORKFLOW_DRY_RUN",
           channel: "workflow",
           payload_json: {},
           risk_tier: 0,
-        }),
+        },
       });
-      if (!response.ok) {
-        setMessage(await readApiError(response, "Dry-run failed"));
-        return;
-      }
-      const payload = (await response.json()) as { matched: boolean; actions?: unknown[] };
       const actionsCount = Array.isArray(payload.actions) ? payload.actions.length : 0;
       setMessage(payload.matched ? `Dry-run matched (${actionsCount} action(s)).` : "Dry-run did not match.");
-    } catch {
-      setMessage("Dry-run failed (network error).");
+    } catch (error) {
+      if (isApiError(error)) {
+        setMessage(error.message);
+      } else {
+        setMessage("Dry-run failed (network error).");
+      }
     } finally {
       setPending(null);
     }
@@ -79,4 +75,8 @@ export function WorkflowActions({ workflowId, enabled }: Props) {
       {message ? <p className="text-xs text-[rgb(var(--muted-foreground))]">{message}</p> : null}
     </div>
   );
+}
+
+function isApiError(error: unknown): error is ApiError {
+  return typeof error === "object" && error !== null && "status" in error && "message" in error;
 }
