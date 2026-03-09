@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { apiFetch } from "../../../../lib/api";
+import { CampaignActions } from "../campaign-actions";
 
 type AdsCampaignDetail = {
   id: string;
@@ -60,6 +61,16 @@ export default async function AdsCampaignDetailPage({ params }: AdsCampaignDetai
         <MetricCard label="Provider" value={campaign.provider} />
         <MetricCard label="Daily budget" value={formatCurrency(campaign.daily_budget_usd)} />
         <MetricCard label="Last synced" value={formatDateTime(campaign.last_synced_at)} />
+      </section>
+
+      <section className="surface-card p-6 lg:p-8">
+        <div className="space-y-3">
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">Actions</h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Execute the next valid campaign action based on the current campaign status.
+          </p>
+          <CampaignActions campaignId={campaign.id} status={campaign.status} />
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">

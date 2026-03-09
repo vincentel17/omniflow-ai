@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { apiFetch } from "../../../../lib/api";
+import { WorkflowActions } from "../workflow-actions";
 
 type WorkflowDefinition = {
   id: string;
@@ -66,6 +67,16 @@ export default async function WorkflowDetailPage({ params }: WorkflowDetailPageP
         <MetricCard label="Trigger" value={triggerLabel[workflow.trigger_type] ?? workflow.trigger_type} />
         <MetricCard label="Managed by pack" value={workflow.managed_by_pack ? "Yes" : "No"} />
         <MetricCard label="Updated" value={formatDateTime(workflow.updated_at)} />
+      </section>
+
+      <section className="surface-card p-6 lg:p-8">
+        <div className="space-y-3">
+          <h2 className="text-xl font-semibold text-[var(--foreground)]">Actions</h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Update workflow state or run a dry-run test against this workflow definition.
+          </p>
+          <WorkflowActions enabled={workflow.enabled} workflowId={workflow.id} />
+        </div>
       </section>
 
       <section className="surface-card p-6 lg:p-8">
