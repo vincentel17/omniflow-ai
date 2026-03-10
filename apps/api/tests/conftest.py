@@ -111,7 +111,7 @@ def db_session(migrated_db: None, db_url: str) -> Generator[Session, None, None]
                 "re_checklist_items, re_checklist_templates, re_deals, "
                 "onboarding_sessions, "
                 "connector_dead_letters, connector_workflow_runs, connector_health, oauth_tokens, connector_accounts, data_retention_policies, dsar_requests, permission_audit_reports, usage_metrics, org_subscriptions, subscription_plans, global_admins, predictive_lead_scores, posting_optimizations, ad_budget_recommendations, model_metadata, org_optimization_settings, agent_metrics, agent_runs, agent_definitions, "
-                "audit_logs, events, vertical_packs, vertical_pack_registry, integrations, memberships, users, orgs "
+                "audit_logs, events, vertical_packs, vertical_pack_registry, integrations, password_reset_tokens, auth_credentials, memberships, users, orgs "
                 "RESTART IDENTITY CASCADE"
             )
         )

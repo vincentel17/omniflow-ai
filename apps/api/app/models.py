@@ -409,6 +409,31 @@ class User(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
+class AuthCredential(Base, IdMixin, TimestampMixin):
+    __tablename__ = "auth_credentials"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_auth_credentials_user_id"),
+        Index("ix_auth_credentials_created_at", "created_at"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+
+
+class PasswordResetToken(Base, IdMixin, TimestampMixin):
+    __tablename__ = "password_reset_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_password_reset_tokens_token_hash"),
+        Index("ix_password_reset_tokens_user_id", "user_id"),
+        Index("ix_password_reset_tokens_expires_at", "expires_at"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Membership(Base, IdMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "memberships"
     __table_args__ = (
