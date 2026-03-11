@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 import { apiFetch } from "../../../lib/api";
+import { getApiBaseUrl } from "../../../lib/dev-context";
 import { IntegrationsClient } from "./integrations-client";
 
 type ConnectorAccount = {
@@ -38,7 +40,26 @@ async function getAccounts(): Promise<ConnectorAccount[]> {
 
 async function getOpsSettings(): Promise<OpsSettings> {
   try {
-    return await apiFetch<OpsSettings>("/ops/settings");
+    const store = await cookies();
+    const cookieHeader = store
+      .getAll()
+      .map((entry) => `${entry.name}=${entry.value}`)
+      .join("; ");
+
+    if (!cookieHeader) {
+      return { connector_mode: "mock", providers_enabled_json: {} };
+    }
+
+    const response = await fetch(`${getApiBaseUrl()}/ops/settings`, {
+      cache: "no-store",
+      headers: { Cookie: cookieHeader }
+    });
+
+    if (!response.ok) {
+      return { connector_mode: "mock", providers_enabled_json: {} };
+    }
+
+    return (await response.json()) as OpsSettings;
   } catch {
     return { connector_mode: "mock", providers_enabled_json: {} };
   }
