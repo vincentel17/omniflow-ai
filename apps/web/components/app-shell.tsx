@@ -168,6 +168,7 @@ export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMo
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [idleWarningVisible, setIdleWarningVisible] = useState(false);
+  const [modeState, setModeState] = useState({ aiMode, connectorMode });
   const showNavigation = sessionMode;
   const apiBase = useMemo(() => getApiBaseUrl(), []);
 
@@ -185,6 +186,44 @@ export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMo
       setLogoutLoading(false);
     }
   }, [apiBase, router]);
+
+  useEffect(() => {
+    setModeState({ aiMode, connectorMode });
+  }, [aiMode, connectorMode]);
+
+  useEffect(() => {
+    if (!sessionMode) {
+      return;
+    }
+    let cancelled = false;
+
+    const refreshModes = async () => {
+      try {
+        const response = await fetch(`${apiBase}/ops/settings`, {
+          cache: "no-store",
+          credentials: "include"
+        });
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as Partial<{ ai_mode: string; connector_mode: string }>;
+        if (cancelled) {
+          return;
+        }
+        setModeState((current) => ({
+          aiMode: payload.ai_mode ?? current.aiMode,
+          connectorMode: payload.connector_mode ?? current.connectorMode
+        }));
+      } catch {
+        // Keep rendered fallback modes when runtime refresh fails.
+      }
+    };
+
+    void refreshModes();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, sessionMode]);
 
   useEffect(() => {
     if (!sessionMode) {
@@ -255,8 +294,8 @@ export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMo
             <div className="flex flex-col items-start gap-2 lg:items-end">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="info">{envLabel}</Badge>
-                <Badge tone="warn">AI {aiMode}</Badge>
-                <Badge tone="warn">Connector {connectorMode}</Badge>
+                <Badge tone="warn">AI {modeState.aiMode}</Badge>
+                <Badge tone="warn">Connector {modeState.connectorMode}</Badge>
                 <ThemeToggle />
                 {sessionMode ? (
                   <ButtonGhost data-testid="app-logout" disabled={logoutLoading} onClick={onLogout} type="button">
