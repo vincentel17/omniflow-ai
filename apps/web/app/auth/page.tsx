@@ -71,7 +71,7 @@ export default function AuthPage(): JSX.Element {
     setMode(routeMode);
   }, [routeMode]);
 
-  async function checkSession() {
+  async function checkSession({ redirectOnSuccess = true }: { redirectOnSuccess?: boolean } = {}): Promise<SessionPayload | null> {
     setLoading(true);
     try {
       const response = await fetch(`${apiBase}/auth/session`, { credentials: "include", cache: "no-store" });
@@ -79,11 +79,13 @@ export default function AuthPage(): JSX.Element {
       setSession(payload);
       setMirroredSessionCookie(payload);
       setMessage(payload.authenticated ? "Session is active." : "No active session.");
-      if (payload.authenticated) {
+      if (payload.authenticated && redirectOnSuccess) {
         window.location.assign(nextPath);
       }
+      return payload;
     } catch {
       setMessage("Failed to check session.");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -106,8 +108,13 @@ export default function AuthPage(): JSX.Element {
         setMessage(payload.detail ?? "Login failed.");
         return;
       }
-      await checkSession();
-      setMessage("Session created. Redirecting...");
+      const verified = await checkSession({ redirectOnSuccess: false });
+      if (verified?.authenticated) {
+        setMessage("Session created. Redirecting...");
+        window.location.assign(nextPath);
+      } else {
+        setMessage("Login succeeded, but no active session cookie was detected. Check cookie/CORS settings.");
+      }
     } catch {
       setMessage("Login failed.");
     } finally {
@@ -372,7 +379,9 @@ export default function AuthPage(): JSX.Element {
               <button
                 className="btn-enterprise btn-enterprise-secondary"
                 disabled={loading}
-                onClick={checkSession}
+                onClick={() => {
+                  void checkSession();
+                }}
                 type="button"
               >
                 Check Session

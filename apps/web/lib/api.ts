@@ -9,6 +9,20 @@ export type ApiError = {
   requestId?: string;
 };
 
+function handleAuthFailure(status: number): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (status !== 401 && status !== 403) {
+    return;
+  }
+  if (window.location.pathname.startsWith("/auth")) {
+    return;
+  }
+  const next = `${window.location.pathname}${window.location.search}`;
+  window.location.assign(`/auth/login?next=${encodeURIComponent(next)}`);
+}
+
 type FetchOptions = {
   method?: ApiMethod;
   body?: unknown;
@@ -26,6 +40,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   });
 
   if (!response.ok) {
+    handleAuthFailure(response.status);
     const requestId = response.headers.get("X-Request-Id") ?? undefined;
     let message = `Request failed (${response.status})`;
     try {
