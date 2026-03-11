@@ -165,6 +165,7 @@ function NavContent({ isRealEstate }: { isRealEstate: boolean }) {
 
 export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMode, connectorMode, sessionMode = false }: AppShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [idleWarningVisible, setIdleWarningVisible] = useState(false);
@@ -218,12 +219,22 @@ export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMo
         // Keep rendered fallback modes when runtime refresh fails.
       }
     };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshModes();
+      }
+    };
+    const interval = window.setInterval(() => void refreshModes(), 30_000);
 
+    document.addEventListener("visibilitychange", onVisible);
     void refreshModes();
+
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [apiBase, sessionMode]);
+  }, [apiBase, pathname, sessionMode]);
 
   useEffect(() => {
     if (!sessionMode) {
