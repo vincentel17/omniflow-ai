@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "../components/app-shell";
 import { ToastProvider } from "../components/ui/toast";
-import { getRequestSessionContext } from "../lib/dev-context";
+import { getApiBaseUrl, getRequestSessionContext } from "../lib/dev-context";
 import { getCurrentPackSlugForSession } from "../lib/vertical-pack";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -24,6 +24,52 @@ function envLabel(): string {
   return "DEV";
 }
 
+type RuntimeModes = {
+  aiMode: string;
+  connectorMode: string;
+};
+
+async function getRuntimeModes(orgId: string): Promise<RuntimeModes> {
+  const fallback: RuntimeModes = {
+    aiMode: process.env.NEXT_PUBLIC_AI_MODE ?? "mock",
+    connectorMode: process.env.NEXT_PUBLIC_CONNECTOR_MODE ?? "mock"
+  };
+
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    const cookieHeader = store
+      .getAll()
+      .map((entry) => `${entry.name}=${entry.value}`)
+      .join("; ");
+
+    if (!cookieHeader) {
+      return fallback;
+    }
+
+    const response = await fetch(`${getApiBaseUrl()}/ops/settings`, {
+      cache: "no-store",
+      headers: {
+        Cookie: cookieHeader,
+        "X-Org-Id": orgId,
+        "x-org-id": orgId
+      }
+    });
+
+    if (!response.ok) {
+      return fallback;
+    }
+
+    const payload = (await response.json()) as Partial<{ ai_mode: string; connector_mode: string }>;
+    return {
+      aiMode: payload.ai_mode ?? fallback.aiMode,
+      connectorMode: payload.connector_mode ?? fallback.connectorMode
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const session = await getRequestSessionContext();
   if (!session) {
@@ -37,6 +83,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   }
 
   const packSlug = await getCurrentPackSlugForSession(session);
+  const runtimeModes = await getRuntimeModes(session.org_id);
   const isRealEstate = packSlug === "real-estate";
 
   return (
@@ -44,8 +91,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body className={inter.variable}>
         <ToastProvider>
           <AppShell
-            aiMode={process.env.NEXT_PUBLIC_AI_MODE ?? "mock"}
-            connectorMode={process.env.NEXT_PUBLIC_CONNECTOR_MODE ?? "mock"}
+            aiMode={runtimeModes.aiMode}
+            connectorMode={runtimeModes.connectorMode}
             envLabel={envLabel()}
             isRealEstate={isRealEstate}
             orgName={session.org_id}
