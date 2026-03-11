@@ -38,6 +38,10 @@ services:
         value: mock
       - key: AI_MODE
         value: mock
+      - key: ADS_MODE
+        value: mock
+      - key: JWT_SECRET
+        sync: false
       - key: DEV_AUTH_BYPASS
         value: false
       - key: OAUTH_REDIRECT_URI
@@ -76,6 +80,10 @@ services:
         value: mock
       - key: AI_MODE
         value: mock
+      - key: ADS_MODE
+        value: mock
+      - key: JWT_SECRET
+        sync: false
       - key: LOG_LEVEL
         value: info
 

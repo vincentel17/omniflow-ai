@@ -1,4 +1,7 @@
 import uuid
+import json
+import logging
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -41,6 +44,7 @@ from .services.verticals import validate_pack
 from .settings import settings
 
 app = FastAPI(title="OmniFlow API", version="0.1.0")
+logger = logging.getLogger("omniflow.api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,8 +59,24 @@ app.add_middleware(
 async def request_id_middleware(request: Request, call_next) -> Response:  # type: ignore[override]
     request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
     request.state.request_id = request_id
+    started = time.perf_counter()
     response = await call_next(request)
     response.headers["X-Request-Id"] = request_id
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+    logger.info(
+        json.dumps(
+            {
+                "service": "api",
+                "event_type": "request_complete",
+                "request_id": request_id,
+                "org_id": request.headers.get("X-Org-Id"),
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            }
+        )
+    )
     return response
 
 
@@ -92,6 +112,20 @@ def validate_vertical_packs_on_startup() -> None:
         if not valid:
             joined = "; ".join(errors)
             raise RuntimeError(f"Invalid vertical pack '{entry.name}': {joined}")
+    logger.info(
+        json.dumps(
+            {
+                "service": "api",
+                "event_type": "startup_validated",
+                "request_id": None,
+                "org_id": None,
+                "app_env": settings.app_env,
+                "connector_mode": settings.connector_mode,
+                "ai_mode": settings.ai_mode,
+                "ads_mode": settings.ads_mode,
+            }
+        )
+    )
 
 
 app.include_router(health_router)

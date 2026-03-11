@@ -65,6 +65,16 @@ class PasswordResetConfirmResponse(BaseModel):
     reset: bool
 
 
+class OrgOption(BaseModel):
+    org_id: uuid.UUID
+    org_name: str
+    role: str
+
+
+class OrgLookupResponse(BaseModel):
+    items: list[OrgOption]
+
+
 def _get_membership(db: Session, user_id: uuid.UUID, org_id: uuid.UUID | None) -> Membership | None:
     stmt = (
         select(Membership)
@@ -162,6 +172,30 @@ def create_session(payload: LoginRequest, response: Response, db: Session = Depe
     return _set_session_cookie(response=response, user_id=user.id, org_id=membership.org_id, role=membership.role)
 
 
+@router.post("/org-options", response_model=OrgLookupResponse)
+def list_org_options(payload: LoginRequest, db: Session = Depends(get_db)) -> OrgLookupResponse:
+    normalized_email = _normalize_email(payload.email)
+    user = db.scalar(select(User).where(User.deleted_at.is_(None), func.lower(User.email) == normalized_email))
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
+
+    credential = db.scalar(select(AuthCredential).where(AuthCredential.user_id == user.id))
+    if credential is not None:
+        if not payload.password or not verify_password(payload.password, credential.password_hash):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
+    elif settings.app_env != "development":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
+
+    rows = db.execute(
+        select(Membership.org_id, Membership.role, Org.name)
+        .join(Org, Org.id == Membership.org_id)
+        .where(Membership.user_id == user.id, Membership.deleted_at.is_(None))
+        .order_by(Membership.created_at.asc())
+    ).all()
+    items = [OrgOption(org_id=row[0], role=row[1].value, org_name=row[2]) for row in rows]
+    return OrgLookupResponse(items=items)
+
+
 @router.get("/session", response_model=SessionInfoResponse)
 def get_session(request: Request, db: Session = Depends(get_db)) -> SessionInfoResponse:
     token = request.cookies.get(settings.auth_cookie_name)
@@ -217,7 +251,7 @@ def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(
     db.add(PasswordResetToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at))
     db.commit()
 
-    if settings.app_env == "production":
+    if settings.app_env == "production" and not settings.password_reset_preview_in_production:
         return PasswordResetRequestResponse(accepted=True)
     return PasswordResetRequestResponse(accepted=True, reset_token_preview=token)
 

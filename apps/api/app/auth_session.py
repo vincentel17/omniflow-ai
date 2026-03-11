@@ -22,7 +22,8 @@ def _from_base64url(value: str) -> bytes:
 
 
 def _secret_bytes() -> bytes:
-    raw = settings.token_encryption_key.encode("utf-8")
+    raw_secret = settings.jwt_secret or settings.token_encryption_key
+    raw = raw_secret.encode("utf-8")
     try:
         return base64.b64decode(raw, validate=True)
     except Exception:

@@ -1,13 +1,16 @@
 import os
 import uuid
 import hashlib
+import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 
 from celery import Celery
+from celery.signals import task_failure, task_postrun, task_prerun, worker_ready
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal
+from app.db import SessionLocal, check_db_health
 from app.models import (
     AdAccount,
     AdCampaign,
@@ -60,10 +63,77 @@ from app.services.live_publishers import ConnectorError
 
 broker_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 app = Celery("omniflow-worker", broker=broker_url, backend=broker_url)
+logger = logging.getLogger("omniflow.worker")
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _emit_worker_log(event_type: str, **payload: object) -> None:
+    logger.info(json.dumps({"service": "worker", "event_type": event_type, **payload}))
+
+
+def _validate_worker_startup() -> None:
+    from app.redis_client import get_redis_client
+
+    check_db_health()
+    get_redis_client().ping()
+    required_tasks = {"worker.health.ping", "worker.publish.execute", "worker.inbox.ingest_poll"}
+    missing = sorted(required_tasks.difference(set(app.tasks.keys())))
+    if missing:
+        raise RuntimeError(f"Worker tasks not registered: {', '.join(missing)}")
+
+
+@worker_ready.connect
+def _on_worker_ready(**_: object) -> None:
+    try:
+        _validate_worker_startup()
+        _emit_worker_log(
+            "startup_ready",
+            request_id=None,
+            org_id=None,
+            redis_url_set=bool(os.getenv("REDIS_URL")),
+            connector_mode=os.getenv("CONNECTOR_MODE", "mock"),
+            ai_mode=os.getenv("AI_MODE", "mock"),
+        )
+    except Exception as exc:
+        _emit_worker_log("startup_failed", request_id=None, org_id=None, error=str(exc))
+        raise SystemExit(1) from exc
+
+
+@task_prerun.connect
+def _on_task_prerun(task_id: str | None = None, task=None, args=None, kwargs=None, **_: object) -> None:  # type: ignore[no-untyped-def]
+    org_id = (kwargs or {}).get("org_id")
+    _emit_worker_log(
+        "job_start",
+        request_id=task_id,
+        org_id=str(org_id) if org_id is not None else None,
+        task_name=getattr(task, "name", "unknown"),
+    )
+
+
+@task_postrun.connect
+def _on_task_postrun(task_id: str | None = None, task=None, state: str | None = None, **_: object) -> None:  # type: ignore[no-untyped-def]
+    event_type = "job_success" if state == "SUCCESS" else "job_complete"
+    _emit_worker_log(
+        event_type,
+        request_id=task_id,
+        org_id=None,
+        task_name=getattr(task, "name", "unknown"),
+        state=state,
+    )
+
+
+@task_failure.connect
+def _on_task_failure(task_id: str | None = None, exception=None, sender=None, **_: object) -> None:  # type: ignore[no-untyped-def]
+    _emit_worker_log(
+        "job_failure",
+        request_id=task_id,
+        org_id=None,
+        task_name=getattr(sender, "name", "unknown"),
+        error=str(exception)[:500] if exception is not None else "unknown",
+    )
 
 
 def _publish_mock(provider: str, account_ref: str, content: ContentItem) -> str:
@@ -575,6 +645,27 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
                     content_id=content.id,
                     payload={"publish_job_id": str(job.id), "provider": job.provider},
                 )
+                job.status = PublishJobStatus.FAILED
+                content.status = ContentItemStatus.FAILED
+                _write_system_event(
+                    db=db,
+                    org_id=job.org_id,
+                    channel=content.channel,
+                    event_type="PUBLISH_FAIL",
+                    content_id=content.id,
+                    payload={"publish_job_id": str(job.id), "error": job.last_error},
+                )
+                _write_system_audit(
+                    db=db,
+                    org_id=job.org_id,
+                    action="publish.job_failed",
+                    target_type="publish_job",
+                    target_id=str(job.id),
+                    risk_tier=content.risk_tier,
+                    metadata={"error": job.last_error, "category": exc.category},
+                )
+                db.commit()
+                return "failed_reauth_required"
             _write_system_event(
                 db=db,
                 org_id=job.org_id,
@@ -583,7 +674,31 @@ def publish_job_execute(self: Celery, publish_job_id: str) -> str:
                 content_id=content.id,
                 payload={"publish_job_id": str(job.id), "error_category": exc.category},
             )
-            raise
+            if job.attempts >= 3:
+                job.status = PublishJobStatus.FAILED
+                content.status = ContentItemStatus.FAILED
+                _write_system_event(
+                    db=db,
+                    org_id=job.org_id,
+                    channel=content.channel,
+                    event_type="PUBLISH_FAIL",
+                    content_id=content.id,
+                    payload={"publish_job_id": str(job.id), "error": job.last_error},
+                )
+                _write_system_audit(
+                    db=db,
+                    org_id=job.org_id,
+                    action="publish.job_failed",
+                    target_type="publish_job",
+                    target_id=str(job.id),
+                    risk_tier=content.risk_tier,
+                    metadata={"error": job.last_error, "category": exc.category},
+                )
+                db.commit()
+                return "failed"
+            job.status = PublishJobStatus.QUEUED
+            db.commit()
+            raise self.retry(exc=exc)
         except Exception as exc:  # pragma: no cover - retry path
             job.last_error = str(exc)[:500]
             _record_connector_failure(

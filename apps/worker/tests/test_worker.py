@@ -85,6 +85,28 @@ def test_scheduler_tick_skips_when_auto_posting_disabled(monkeypatch) -> None:
     assert delay_counter.calls == 0
 
 
+def test_worker_startup_validation_checks_dependencies(monkeypatch) -> None:
+    calls = {"db": 0, "redis": 0}
+
+    def _check_db() -> bool:
+        calls["db"] += 1
+        return True
+
+    class _Redis:
+        def ping(self) -> bool:
+            calls["redis"] += 1
+            return True
+
+    monkeypatch.setattr(worker_main, "check_db_health", _check_db)
+    monkeypatch.setattr(worker_main.app, "tasks", {"worker.health.ping": object(), "worker.publish.execute": object(), "worker.inbox.ingest_poll": object()})
+    monkeypatch.setattr("app.redis_client.get_redis_client", lambda: _Redis())
+
+    worker_main._validate_worker_startup()
+
+    assert calls["db"] == 1
+    assert calls["redis"] == 1
+
+
 def test_publish_job_execute_marks_job_succeeded(monkeypatch) -> None:
     org_id = uuid.uuid4()
     content_id = uuid.uuid4()
@@ -182,3 +204,161 @@ def test_connector_breaker_allows_half_open_after_cooldown() -> None:
     assert is_open is False
     assert account.status == "linked"
     assert health.consecutive_failures == 0
+
+
+def test_publish_job_execute_retries_on_transient_connector_error(monkeypatch) -> None:
+    org_id = uuid.uuid4()
+    content_id = uuid.uuid4()
+    job_id = uuid.uuid4()
+    content = SimpleNamespace(
+        id=content_id,
+        org_id=org_id,
+        channel="linkedin",
+        risk_tier=1,
+        text_rendered="Retry path",
+        media_refs_json=[],
+        link_url="https://example.test/post",
+        tags_json=["retry"],
+        status=worker_main.ContentItemStatus.APPROVED,
+    )
+    job = SimpleNamespace(
+        id=job_id,
+        org_id=org_id,
+        content_item_id=content_id,
+        provider="linkedin",
+        account_ref="acct-retry",
+        status=worker_main.PublishJobStatus.QUEUED,
+        attempts=0,
+        external_id=None,
+        published_at=None,
+        last_error=None,
+    )
+
+    class _DummySession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.commits = 0
+
+        def scalar(self, stmt):  # noqa: ANN001
+            self.calls += 1
+            return job if self.calls == 1 else content
+
+        def flush(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            self.commits += 1
+
+    class _Publisher:
+        def publish_post(self, payload):  # noqa: ANN001
+            raise worker_main.ConnectorError("network", "temporary provider failure")
+
+    def _retry(*args, **kwargs):  # noqa: ANN001
+        raise RuntimeError("retry-called")
+
+    db = _DummySession()
+    monkeypatch.setattr(worker_main, "SessionLocal", lambda: db)
+    monkeypatch.setattr(worker_main, "_org_is_active", lambda db, org_id: True)
+    monkeypatch.setattr(worker_main, "_org_feature_enabled", lambda db, org_id, key, fallback: True)
+    monkeypatch.setattr(worker_main, "_provider_publish_enabled", lambda db, org_id, provider: True)
+    monkeypatch.setattr(worker_main, "_connector_breaker_open", lambda db, org_id, provider, account_ref: False)
+    monkeypatch.setattr(worker_main, "_record_connector_failure", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "_write_system_event", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "_write_system_audit", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "get_publisher", lambda provider, org_id, account_ref, db: _Publisher())
+    monkeypatch.setattr(worker_main.publish_job_execute, "retry", _retry)
+
+    try:
+        worker_main.publish_job_execute.run(str(job_id))
+        assert False, "Expected retry"
+    except RuntimeError as exc:
+        assert str(exc) == "retry-called"
+
+    assert job.status == worker_main.PublishJobStatus.QUEUED
+    assert content.status == worker_main.ContentItemStatus.PUBLISHING
+    assert job.attempts == 1
+    assert db.commits == 1
+
+
+def test_publish_job_execute_marks_reauth_connector_error_as_failed(monkeypatch) -> None:
+    org_id = uuid.uuid4()
+    content_id = uuid.uuid4()
+    job_id = uuid.uuid4()
+    content = SimpleNamespace(
+        id=content_id,
+        org_id=org_id,
+        channel="meta",
+        risk_tier=1,
+        text_rendered="Auth failure",
+        media_refs_json=[],
+        link_url=None,
+        tags_json=[],
+        status=worker_main.ContentItemStatus.APPROVED,
+    )
+    job = SimpleNamespace(
+        id=job_id,
+        org_id=org_id,
+        content_item_id=content_id,
+        provider="meta",
+        account_ref="acct-auth",
+        status=worker_main.PublishJobStatus.QUEUED,
+        attempts=0,
+        external_id=None,
+        published_at=None,
+        last_error=None,
+    )
+    account = SimpleNamespace(status="linked")
+
+    class _DummySession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.commits = 0
+
+        def scalar(self, stmt):  # noqa: ANN001
+            self.calls += 1
+            if self.calls == 1:
+                return job
+            if self.calls == 2:
+                return content
+            return account
+
+        def flush(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            self.commits += 1
+
+    class _Publisher:
+        def publish_post(self, payload):  # noqa: ANN001
+            raise worker_main.ConnectorError("reauth_required", "token refresh failed")
+
+    db = _DummySession()
+    monkeypatch.setattr(worker_main, "SessionLocal", lambda: db)
+    monkeypatch.setattr(worker_main, "_org_is_active", lambda db, org_id: True)
+    monkeypatch.setattr(worker_main, "_org_feature_enabled", lambda db, org_id, key, fallback: True)
+    monkeypatch.setattr(worker_main, "_provider_publish_enabled", lambda db, org_id, provider: True)
+    monkeypatch.setattr(worker_main, "_connector_breaker_open", lambda db, org_id, provider, account_ref: False)
+    monkeypatch.setattr(worker_main, "_record_connector_failure", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "_write_system_event", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "_write_system_audit", lambda **kwargs: None)
+    monkeypatch.setattr(worker_main, "get_publisher", lambda provider, org_id, account_ref, db: _Publisher())
+
+    result = worker_main.publish_job_execute.run(str(job_id))
+
+    assert result == "failed_reauth_required"
+    assert job.status == worker_main.PublishJobStatus.FAILED
+    assert content.status == worker_main.ContentItemStatus.FAILED
+    assert account.status == "reauth_required"
+    assert db.commits == 1
