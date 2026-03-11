@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -15,8 +16,10 @@ from ..db import get_db
 from ..models import AuthCredential, Membership, Org, PasswordResetToken, Role, User
 from ..settings import settings
 from ..services.auth_security import enforce_login_rate_limit, issue_csrf_token, log_auth_event
+from ..services.password_reset_delivery import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger("omniflow.api.auth")
 
 
 class LoginRequest(BaseModel):
@@ -105,8 +108,6 @@ def _normalize_email(value: str) -> str:
 
 
 def _csrf_cookie_samesite() -> Literal["lax", "strict", "none"]:
-    if settings.app_env == "production":
-        return "strict"
     return settings.auth_cookie_samesite
 
 
@@ -142,7 +143,7 @@ def _set_session_cookie(
         session_version=session_version,
         ttl_seconds=settings.auth_session_ttl_seconds,
     )
-    cookie_same_site = "strict" if settings.app_env == "production" else settings.auth_cookie_samesite
+    cookie_same_site = settings.auth_cookie_samesite
     cookie_secure = settings.auth_cookie_secure or settings.app_env == "production"
     response.set_cookie(
         key=settings.auth_cookie_name,
@@ -372,6 +373,10 @@ def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(
     db.commit()
 
     if settings.app_env == "production" and not settings.password_reset_preview_in_production:
+        try:
+            send_password_reset_email(to_email=normalized_email, token=token)
+        except Exception:
+            logger.exception("password_reset_delivery_failed")
         return PasswordResetRequestResponse(accepted=True)
     return PasswordResetRequestResponse(accepted=True, reset_token_preview=token)
 

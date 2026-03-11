@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     auth_session_ttl_seconds: int = 28800
     session_ttl_minutes: int = 480
     password_reset_preview_in_production: bool = False
+    password_reset_url_base: str = "http://localhost:3000/auth/reset"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
+    smtp_from_email: str | None = None
     cors_allowed_origins: str = "http://localhost:13000,http://localhost:3000"
     ai_mode: str = "mock"
     ads_mode: str = "mock"
@@ -97,6 +104,13 @@ class Settings(BaseSettings):
             missing.append("TOKEN_ENCRYPTION_KEY")
         if self.app_env == "production" and not self.jwt_secret:
             missing.append("JWT_SECRET")
+        if self.app_env == "production" and not self.password_reset_preview_in_production:
+            if not self.smtp_host:
+                missing.append("SMTP_HOST")
+            if not self.smtp_from_email:
+                missing.append("SMTP_FROM_EMAIL")
+            if not self.password_reset_url_base:
+                missing.append("PASSWORD_RESET_URL_BASE")
         if self.connector_mode == "live" and not self.oauth_redirect_uri:
             missing.append("OAUTH_REDIRECT_URI")
         if self.ai_mode == "live" and not self.openai_api_key:

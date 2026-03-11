@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.models import AuthCredential, Membership, User
 import app.services.auth_security as auth_security
+import app.routers.auth as auth_router
 from app.settings import settings
 
 
@@ -110,6 +111,11 @@ async def test_password_reset_request_is_generic_for_unknown_users(db_session: S
 
 
 async def test_password_reset_request_hides_preview_by_default_in_production(db_session: Session, monkeypatch) -> None:
+    deliveries: list[tuple[str, str]] = []
+
+    def _fake_delivery(to_email: str, token: str) -> None:
+        deliveries.append((to_email, token))
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         register = await client.post(
             "/auth/register",
@@ -124,9 +130,13 @@ async def test_password_reset_request_hides_preview_by_default_in_production(db_
 
         monkeypatch.setattr(settings, "app_env", "production")
         monkeypatch.setattr(settings, "password_reset_preview_in_production", False)
+        monkeypatch.setattr(auth_router, "send_password_reset_email", _fake_delivery)
         response = await client.post("/auth/password-reset/request", json={"email": "prod-owner@enterprise.test"})
         assert response.status_code == 200
         assert response.json() == {"accepted": True, "reset_token_preview": None}
+        assert len(deliveries) == 1
+        assert deliveries[0][0] == "prod-owner@enterprise.test"
+        assert deliveries[0][1]
 
 
 async def test_password_reset_request_can_preview_with_explicit_production_toggle(db_session: Session, monkeypatch) -> None:
@@ -149,3 +159,29 @@ async def test_password_reset_request_can_preview_with_explicit_production_toggl
         payload = response.json()
         assert payload["accepted"] is True
         assert payload["reset_token_preview"]
+
+
+async def test_login_respects_configured_cookie_samesite_in_production(db_session: Session, monkeypatch) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        register = await client.post(
+            "/auth/register",
+            json={
+                "email": "cookie-owner@enterprise.test",
+                "password": "InitialPass123!",
+                "full_name": "Cookie Owner",
+                "org_name": "Cookie Org",
+            },
+        )
+        assert register.status_code == 201
+
+        monkeypatch.setattr(settings, "app_env", "production")
+        monkeypatch.setattr(settings, "auth_cookie_samesite", "none")
+        monkeypatch.setattr(settings, "auth_cookie_secure", True)
+        login = await client.post(
+            "/auth/session",
+            json={"email": "cookie-owner@enterprise.test", "password": "InitialPass123!"},
+        )
+        assert login.status_code == 200
+        set_cookie = ", ".join(login.headers.get_list("set-cookie"))
+        assert "SameSite=none" in set_cookie
+        assert "Secure" in set_cookie
