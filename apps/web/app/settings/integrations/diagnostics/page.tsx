@@ -1,4 +1,6 @@
-import { apiFetch } from "../../../../lib/api";
+import { cookies } from "next/headers";
+
+import { getApiBaseUrl } from "../../../../lib/dev-context";
 
 type DiagnosticsSummary = {
   connector_mode: string;
@@ -23,7 +25,26 @@ const GBP_ENV_KEYS = [
 
 async function getDiagnosticsSummary(): Promise<DiagnosticsSummary | null> {
   try {
-    return await apiFetch<DiagnosticsSummary>("/connectors/diagnostics/summary");
+    const store = await cookies();
+    const cookieHeader = store
+      .getAll()
+      .map((entry) => `${entry.name}=${entry.value}`)
+      .join("; ");
+
+    if (!cookieHeader) {
+      return null;
+    }
+
+    const response = await fetch(`${getApiBaseUrl()}/connectors/diagnostics/summary`, {
+      cache: "no-store",
+      headers: { Cookie: cookieHeader }
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as DiagnosticsSummary;
   } catch {
     return null;
   }
