@@ -1,12 +1,27 @@
 from __future__ import annotations
 
+import uuid
+
+import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.main import app
 from app.models import AuthCredential, Membership, User
+import app.services.auth_security as auth_security
 from app.settings import settings
+
+
+def _csrf_headers(client: AsyncClient) -> dict[str, str]:
+    token = client.cookies.get(settings.auth_csrf_cookie_name)
+    return {"x-csrf-token": token} if token else {}
+
+
+@pytest.fixture(autouse=True)
+def _isolate_login_rate_limit_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+    ip = f"test-{uuid.uuid4()}"
+    monkeypatch.setattr(auth_security, "get_client_ip", lambda request: ip)
 
 
 async def test_register_login_and_reset_password_flow(db_session: Session) -> None:
@@ -34,6 +49,7 @@ async def test_register_login_and_reset_password_flow(db_session: Session) -> No
         org_options = await client.post(
             "/auth/org-options",
             json={"email": "owner@enterprise.test", "password": "InitialPass123!"},
+            headers=_csrf_headers(client),
         )
         assert org_options.status_code == 200
         options_payload = org_options.json()
@@ -43,12 +59,14 @@ async def test_register_login_and_reset_password_flow(db_session: Session) -> No
         invalid_login = await client.post(
             "/auth/session",
             json={"email": "owner@enterprise.test", "password": "WrongPass123!"},
+            headers=_csrf_headers(client),
         )
         assert invalid_login.status_code == 401
 
         request_reset = await client.post(
             "/auth/password-reset/request",
             json={"email": "owner@enterprise.test"},
+            headers=_csrf_headers(client),
         )
         assert request_reset.status_code == 200
         token = request_reset.json()["reset_token_preview"]
@@ -57,6 +75,7 @@ async def test_register_login_and_reset_password_flow(db_session: Session) -> No
         confirm_reset = await client.post(
             "/auth/password-reset/confirm",
             json={"token": token, "new_password": "UpdatedPass456!"},
+            headers=_csrf_headers(client),
         )
         assert confirm_reset.status_code == 200
         assert confirm_reset.json()["reset"] is True
@@ -64,12 +83,14 @@ async def test_register_login_and_reset_password_flow(db_session: Session) -> No
         stale_login = await client.post(
             "/auth/session",
             json={"email": "owner@enterprise.test", "password": "InitialPass123!"},
+            headers=_csrf_headers(client),
         )
         assert stale_login.status_code == 401
 
         refreshed_login = await client.post(
             "/auth/session",
             json={"email": "owner@enterprise.test", "password": "UpdatedPass456!"},
+            headers=_csrf_headers(client),
         )
         assert refreshed_login.status_code == 200
 

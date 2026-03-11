@@ -1,7 +1,7 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl } from "../../lib/dev-context";
 
 type SessionPayload = {
@@ -14,6 +14,18 @@ type SessionPayload = {
 };
 
 type AuthMode = "login" | "register" | "request-reset" | "confirm-reset";
+type OrgOption = { org_id: string; org_name: string; role: string };
+
+function getCookieValue(name: string): string {
+  const prefix = `${name}=`;
+  const parts = document.cookie.split("; ");
+  for (const part of parts) {
+    if (part.startsWith(prefix)) {
+      return decodeURIComponent(part.slice(prefix.length));
+    }
+  }
+  return "";
+}
 
 function setMirroredSessionCookie(payload: SessionPayload) {
   if (!payload.authenticated || !payload.session) {
@@ -31,7 +43,13 @@ function setMirroredSessionCookie(payload: SessionPayload) {
 }
 
 export default function AuthPage(): JSX.Element {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const routeMode = useMemo<AuthMode>(() => {
+    if (pathname.endsWith("/create")) return "register";
+    if (pathname.endsWith("/reset")) return "request-reset";
+    return "login";
+  }, [pathname]);
   const nextPath = searchParams.get("next") || "/dashboard";
   const apiBase = useMemo(() => getApiBaseUrl(), []);
   const [email, setEmail] = useState("");
@@ -39,12 +57,19 @@ export default function AuthPage(): JSX.Element {
   const [fullName, setFullName] = useState("");
   const [orgName, setOrgName] = useState("");
   const [orgId, setOrgId] = useState("");
+  const [orgOptions, setOrgOptions] = useState<OrgOption[]>([]);
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [mode, setMode] = useState<AuthMode>(routeMode);
   const [message, setMessage] = useState("Sign in with your credential, or create one if you are new.");
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [loading, setLoading] = useState(false);
+  const lookupDebounceRef = useRef<number | null>(null);
+  const lastOrgLookupRef = useRef<string>("");
+
+  useEffect(() => {
+    setMode(routeMode);
+  }, [routeMode]);
 
   async function checkSession() {
     setLoading(true);
@@ -89,6 +114,80 @@ export default function AuthPage(): JSX.Element {
       setLoading(false);
     }
   }
+
+  const loadOrgOptions = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
+    if (!quiet) {
+      setLoading(true);
+      setMessage("Loading organizations...");
+    }
+    try {
+      const response = await fetch(`${apiBase}/auth/org-options`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password: password || undefined }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json()) as { detail?: string };
+        setMessage(payload.detail ?? "Unable to load organizations.");
+        return;
+      }
+      const payload = (await response.json()) as { items?: OrgOption[] };
+      const items = payload.items ?? [];
+      setOrgOptions(items);
+      if (items.length > 0) {
+        setOrgId(items[0].org_id);
+      } else {
+        setOrgId("");
+      }
+      if (!quiet) {
+        setMessage(items.length > 0 ? "Select organization and sign in." : "No organizations found for this user.");
+      }
+    } catch {
+      if (!quiet) {
+        setMessage("Unable to load organizations.");
+      }
+    } finally {
+      if (!quiet) {
+        setLoading(false);
+      }
+    }
+  }, [apiBase, email, password]);
+
+  useEffect(() => {
+    if (mode !== "login") {
+      return;
+    }
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !password) {
+      setOrgOptions([]);
+      setOrgId("");
+      lastOrgLookupRef.current = "";
+      if (lookupDebounceRef.current !== null) {
+        window.clearTimeout(lookupDebounceRef.current);
+      }
+      return;
+    }
+
+    const key = `${trimmedEmail}:${password}`;
+    if (key === lastOrgLookupRef.current) {
+      return;
+    }
+
+    if (lookupDebounceRef.current !== null) {
+      window.clearTimeout(lookupDebounceRef.current);
+    }
+    lookupDebounceRef.current = window.setTimeout(() => {
+      lastOrgLookupRef.current = key;
+      void loadOrgOptions({ quiet: true });
+    }, 500);
+
+    return () => {
+      if (lookupDebounceRef.current !== null) {
+        window.clearTimeout(lookupDebounceRef.current);
+      }
+    };
+  }, [email, loadOrgOptions, mode, password]);
 
   async function submitRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -175,7 +274,12 @@ export default function AuthPage(): JSX.Element {
   async function logout() {
     setLoading(true);
     try {
-      await fetch(`${apiBase}/auth/session`, { method: "DELETE", credentials: "include" });
+      const csrf = getCookieValue("omniflow_csrf");
+      await fetch(`${apiBase}/auth/session`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: csrf ? { "x-csrf-token": csrf } : undefined
+      });
       setMirroredSessionCookie({ authenticated: false, session: null });
       setSession({ authenticated: false, session: null });
       setMessage("Session cleared.");
@@ -233,17 +337,37 @@ export default function AuthPage(): JSX.Element {
               />
             </label>
             <label className="space-y-1.5 text-sm">
-              <span className="font-medium">Org ID (optional)</span>
-              <input
-                className="input-enterprise"
-                value={orgId}
-                onChange={(event) => setOrgId(event.target.value)}
-                placeholder="00000000-0000-0000-0000-000000000000"
-              />
+              <span className="font-medium">Organization (optional)</span>
+              {orgOptions.length > 0 ? (
+                <select className="input-enterprise" value={orgId} onChange={(event) => setOrgId(event.target.value)}>
+                  {orgOptions.map((option) => (
+                    <option key={option.org_id} value={option.org_id}>
+                      {option.org_name} ({option.role})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="input-enterprise"
+                  value={orgId}
+                  onChange={(event) => setOrgId(event.target.value)}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                />
+              )}
             </label>
             <div className="flex flex-wrap gap-2">
               <button className="btn-enterprise btn-enterprise-primary" disabled={loading} type="submit">
                 Sign In
+              </button>
+              <button
+                className="btn-enterprise btn-enterprise-secondary"
+                disabled={loading}
+                onClick={() => {
+                  void loadOrgOptions();
+                }}
+                type="button"
+              >
+                Find Organizations
               </button>
               <button
                 className="btn-enterprise btn-enterprise-secondary"

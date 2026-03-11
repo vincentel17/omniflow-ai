@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -9,10 +10,11 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..auth_password import generate_reset_token, hash_password, hash_reset_token, verify_password
-from ..auth_session import create_session_token, verify_session_token
+from ..auth_session import create_session_token, verify_session_token_with_reason
 from ..db import get_db
 from ..models import AuthCredential, Membership, Org, PasswordResetToken, Role, User
 from ..settings import settings
+from ..services.auth_security import enforce_login_rate_limit, issue_csrf_token, log_auth_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -65,6 +67,10 @@ class PasswordResetConfirmResponse(BaseModel):
     reset: bool
 
 
+class LogoutResponse(BaseModel):
+    success: bool
+
+
 class OrgOption(BaseModel):
     org_id: uuid.UUID
     org_name: str
@@ -98,18 +104,61 @@ def _normalize_email(value: str) -> str:
     return normalized
 
 
-def _set_session_cookie(response: Response, user_id: uuid.UUID, org_id: uuid.UUID, role: Role) -> SessionResponse:
-    token = create_session_token(user_id=user_id, org_id=org_id, role=role)
+def _csrf_cookie_samesite() -> Literal["lax", "strict", "none"]:
+    if settings.app_env == "production":
+        return "strict"
+    return settings.auth_cookie_samesite
+
+
+def _set_csrf_cookie(response: Response, csrf_token: str) -> None:
+    cookie_secure = settings.auth_cookie_secure or settings.app_env == "production"
+    response.set_cookie(
+        key=settings.auth_csrf_cookie_name,
+        value=csrf_token,
+        httponly=False,
+        secure=cookie_secure,
+        samesite=_csrf_cookie_samesite(),
+        max_age=settings.auth_session_ttl_seconds,
+        path="/",
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    response.delete_cookie(key=settings.auth_cookie_name, path="/")
+    response.delete_cookie(key=settings.auth_csrf_cookie_name, path="/")
+
+
+def _set_session_cookie(
+    response: Response,
+    user_id: uuid.UUID,
+    org_id: uuid.UUID,
+    role: Role,
+    session_version: int,
+) -> SessionResponse:
+    token = create_session_token(
+        user_id=user_id,
+        org_id=org_id,
+        role=role,
+        session_version=session_version,
+        ttl_seconds=settings.auth_session_ttl_seconds,
+    )
+    cookie_same_site = "strict" if settings.app_env == "production" else settings.auth_cookie_samesite
+    cookie_secure = settings.auth_cookie_secure or settings.app_env == "production"
     response.set_cookie(
         key=settings.auth_cookie_name,
         value=token,
         httponly=True,
-        secure=settings.auth_cookie_secure,
-        samesite=settings.auth_cookie_samesite,
+        secure=cookie_secure,
+        samesite=cookie_same_site,
         max_age=settings.auth_session_ttl_seconds,
         path="/",
     )
+    _set_csrf_cookie(response, issue_csrf_token())
     return SessionResponse(user_id=user_id, org_id=org_id, role=role.value)
+
+
+def _invalidate_user_sessions(db: Session, user_id: uuid.UUID) -> None:
+    db.execute(update(User).where(User.id == user_id).values(session_version=User.session_version + 1))
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -144,7 +193,14 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)) -> Re
 
 
 @router.post("/session", response_model=SessionResponse)
-def create_session(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> SessionResponse:
+@router.post("/login", response_model=SessionResponse)
+def create_session(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> SessionResponse:
+    enforce_login_rate_limit(request)
     normalized_email = _normalize_email(payload.email)
     if not normalized_email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email is required")
@@ -156,20 +212,42 @@ def create_session(payload: LoginRequest, response: Response, db: Session = Depe
         )
     )
     if user is None:
+        log_auth_event(db=db, request=request, event_type="login_failure", user_id=None, org_id=None)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
 
     credential = db.scalar(select(AuthCredential).where(AuthCredential.user_id == user.id))
     if credential is not None:
         if not payload.password or not verify_password(payload.password, credential.password_hash):
+            log_auth_event(db=db, request=request, event_type="login_failure", user_id=user.id, org_id=None)
+            db.commit()
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
     elif settings.app_env != "development":
+        log_auth_event(db=db, request=request, event_type="login_failure", user_id=user.id, org_id=None)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
 
     membership = _get_membership(db=db, user_id=user.id, org_id=payload.org_id)
     if membership is None:
+        log_auth_event(db=db, request=request, event_type="login_failure", user_id=user.id, org_id=None)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="org membership required")
 
-    return _set_session_cookie(response=response, user_id=user.id, org_id=membership.org_id, role=membership.role)
+    log_auth_event(
+        db=db,
+        request=request,
+        event_type="login_success",
+        user_id=user.id,
+        org_id=membership.org_id,
+    )
+    db.commit()
+    return _set_session_cookie(
+        response=response,
+        user_id=user.id,
+        org_id=membership.org_id,
+        role=membership.role,
+        session_version=user.session_version,
+    )
 
 
 @router.post("/org-options", response_model=OrgLookupResponse)
@@ -197,13 +275,18 @@ def list_org_options(payload: LoginRequest, db: Session = Depends(get_db)) -> Or
 
 
 @router.get("/session", response_model=SessionInfoResponse)
-def get_session(request: Request, db: Session = Depends(get_db)) -> SessionInfoResponse:
+def get_session(request: Request, response: Response, db: Session = Depends(get_db)) -> SessionInfoResponse:
     token = request.cookies.get(settings.auth_cookie_name)
     if not token:
         return SessionInfoResponse(authenticated=False)
 
-    payload = verify_session_token(token)
+    payload, reason = verify_session_token_with_reason(token)
     if payload is None:
+        if reason == "expired":
+            _clear_auth_cookies(response)
+            log_auth_event(db=db, request=request, event_type="session_expired", user_id=None, org_id=None)
+            db.commit()
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session expired")
         return SessionInfoResponse(authenticated=False)
 
     try:
@@ -216,6 +299,11 @@ def get_session(request: Request, db: Session = Depends(get_db)) -> SessionInfoR
     if membership is None:
         return SessionInfoResponse(authenticated=False)
 
+    user = db.scalar(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    if user is None or int(user.session_version) != int(payload["sv"]):
+        _clear_auth_cookies(response)
+        return SessionInfoResponse(authenticated=False)
+
     return SessionInfoResponse(
         authenticated=True,
         session=SessionResponse(user_id=user_id, org_id=org_id, role=membership.role.value),
@@ -223,9 +311,41 @@ def get_session(request: Request, db: Session = Depends(get_db)) -> SessionInfoR
 
 
 @router.delete("/session", response_model=SessionInfoResponse)
-def delete_session(response: Response) -> SessionInfoResponse:
-    response.delete_cookie(key=settings.auth_cookie_name, path="/")
+def delete_session(request: Request, response: Response, db: Session = Depends(get_db)) -> SessionInfoResponse:
+    token = request.cookies.get(settings.auth_cookie_name)
+    if token:
+        payload, _ = verify_session_token_with_reason(token)
+        if payload is not None:
+            try:
+                user_id = uuid.UUID(str(payload["sub"]))
+                org_id = uuid.UUID(str(payload["org"]))
+                _invalidate_user_sessions(db=db, user_id=user_id)
+                log_auth_event(db=db, request=request, event_type="logout", user_id=user_id, org_id=org_id)
+                db.commit()
+            except ValueError:
+                pass
+    _clear_auth_cookies(response)
+    _set_csrf_cookie(response, issue_csrf_token())
     return SessionInfoResponse(authenticated=False)
+
+
+@router.post("/logout", response_model=LogoutResponse)
+def logout(request: Request, response: Response, db: Session = Depends(get_db)) -> LogoutResponse:
+    token = request.cookies.get(settings.auth_cookie_name)
+    if token:
+        payload, _ = verify_session_token_with_reason(token)
+        if payload is not None:
+            try:
+                user_id = uuid.UUID(str(payload["sub"]))
+                org_id = uuid.UUID(str(payload["org"]))
+                _invalidate_user_sessions(db=db, user_id=user_id)
+                log_auth_event(db=db, request=request, event_type="logout", user_id=user_id, org_id=org_id)
+                db.commit()
+            except ValueError:
+                pass
+    _clear_auth_cookies(response)
+    _set_csrf_cookie(response, issue_csrf_token())
+    return LogoutResponse(success=True)
 
 
 @router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
@@ -274,6 +394,7 @@ def confirm_password_reset(payload: PasswordResetConfirmRequest, db: Session = D
 
     credential.password_hash = hash_password(payload.new_password)
     row.used_at = datetime.now(UTC)
+    _invalidate_user_sessions(db=db, user_id=row.user_id)
     db.commit()
     return PasswordResetConfirmResponse(reset=True)
 

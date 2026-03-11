@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { navSections } from "../lib/nav";
 import { cn } from "../lib/cn";
+import { getApiBaseUrl } from "../lib/dev-context";
+import { createSessionIdleController } from "../lib/session-idle";
 import { Badge, ButtonGhost } from "./ui/primitives";
 
 type AppShellProps = {
@@ -18,6 +20,17 @@ type AppShellProps = {
   connectorMode: string;
   sessionMode?: boolean;
 };
+
+function getCookieValue(name: string): string {
+  const prefix = `${name}=`;
+  const parts = document.cookie.split("; ");
+  for (const part of parts) {
+    if (part.startsWith(prefix)) {
+      return decodeURIComponent(part.slice(prefix.length));
+    }
+  }
+  return "";
+}
 
 function AppIcon({ name }: { name: string }) {
   const common = "h-4 w-4";
@@ -151,22 +164,90 @@ function NavContent({ isRealEstate }: { isRealEstate: boolean }) {
 }
 
 export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMode, connectorMode, sessionMode = false }: AppShellProps) {
+  const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [idleWarningVisible, setIdleWarningVisible] = useState(false);
+  const showNavigation = sessionMode;
+  const apiBase = useMemo(() => getApiBaseUrl(), []);
+
+  const onLogout = useCallback(async () => {
+    setLogoutLoading(true);
+    try {
+      await fetch(`${apiBase}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      document.cookie = "omniflow_session_ctx=; Path=/; Max-Age=0; SameSite=Lax";
+      router.push("/auth/login");
+      router.refresh();
+      setLogoutLoading(false);
+    }
+  }, [apiBase, router]);
+
+  useEffect(() => {
+    if (!sessionMode) {
+      return;
+    }
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const nextInit: RequestInit = { ...init };
+      const method = (nextInit.method || "GET").toUpperCase();
+      if (method === "POST" || method === "PUT" || method === "DELETE") {
+        const csrfToken = getCookieValue("omniflow_csrf");
+        if (csrfToken) {
+          const headers = new Headers(nextInit.headers ?? undefined);
+          headers.set("x-csrf-token", csrfToken);
+          nextInit.headers = headers;
+        }
+      }
+
+      const response = await originalFetch(input, nextInit);
+      if (response.status === 401 || response.status === 403) {
+        window.location.assign("/auth/login");
+      }
+      return response;
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [sessionMode]);
+
+  useEffect(() => {
+    if (!sessionMode) {
+      return;
+    }
+    return createSessionIdleController({
+      onWarn: () => setIdleWarningVisible(true),
+      onResume: () => setIdleWarningVisible(false),
+      onLogout: () => {
+        setIdleWarningVisible(false);
+        void onLogout();
+      }
+    });
+  }, [onLogout, sessionMode]);
 
   return (
     <div className="app-shell">
-      <aside className="app-sidebar">
-        <NavContent isRealEstate={isRealEstate} />
-      </aside>
+      {showNavigation ? (
+        <aside className="app-sidebar">
+          <NavContent isRealEstate={isRealEstate} />
+        </aside>
+      ) : null}
 
       <div className="app-main">
         <header className="app-topbar px-4 py-3 lg:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-center gap-2 lg:hidden">
-              <ButtonGhost aria-label="Open navigation" onClick={() => setMobileNavOpen(true)} type="button">
-                Menu
-              </ButtonGhost>
-            </div>
+            {showNavigation ? (
+              <div className="flex items-center gap-2 lg:hidden">
+                <ButtonGhost aria-label="Open navigation" onClick={() => setMobileNavOpen(true)} type="button">
+                  Menu
+                </ButtonGhost>
+              </div>
+            ) : null}
             <div className="flex min-w-0 flex-col gap-2">
               <Breadcrumbs />
               <p className="truncate text-xs text-[rgb(var(--muted-foreground))]">org: {orgName} | role: {role}</p>
@@ -177,6 +258,11 @@ export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMo
                 <Badge tone="warn">AI {aiMode}</Badge>
                 <Badge tone="warn">Connector {connectorMode}</Badge>
                 <ThemeToggle />
+                {sessionMode ? (
+                  <ButtonGhost data-testid="app-logout" disabled={logoutLoading} onClick={onLogout} type="button">
+                    Logout
+                  </ButtonGhost>
+                ) : null}
               </div>
               {sessionMode ? (
                 <p className="text-xs text-[rgb(var(--muted-foreground))]">Session auth active</p>
@@ -190,7 +276,7 @@ export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMo
         <div>{children}</div>
       </div>
 
-      {mobileNavOpen ? (
+      {showNavigation && mobileNavOpen ? (
         <div aria-modal="true" className="fixed inset-0 z-50 lg:hidden" role="dialog">
           <button className="absolute inset-0 bg-black/50" onClick={() => setMobileNavOpen(false)} type="button" />
           <div className="relative z-10 h-full w-[280px] overflow-y-auto bg-[rgb(var(--card))]">
@@ -200,6 +286,25 @@ export function AppShell({ children, orgName, role, isRealEstate, envLabel, aiMo
               </ButtonGhost>
             </div>
             <NavContent isRealEstate={isRealEstate} />
+          </div>
+        </div>
+      ) : null}
+
+      {idleWarningVisible ? (
+        <div aria-modal="true" className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4" role="dialog">
+          <div className="surface-card w-full max-w-md space-y-3 p-5">
+            <h2 className="text-lg font-semibold">Session expiring soon</h2>
+            <p className="text-sm text-[rgb(var(--muted-foreground))]">
+              You have been inactive for 30 minutes. You will be signed out in 60 seconds unless activity resumes.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn-enterprise btn-enterprise-secondary" onClick={() => setIdleWarningVisible(false)} type="button">
+                Stay signed in
+              </button>
+              <button className="btn-enterprise btn-enterprise-primary" onClick={() => void onLogout()} type="button">
+                Sign out now
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

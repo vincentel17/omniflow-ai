@@ -30,12 +30,19 @@ def _secret_bytes() -> bytes:
         return raw
 
 
-def create_session_token(user_id: uuid.UUID, org_id: uuid.UUID, role: Role, ttl_seconds: int = 60 * 60 * 8) -> str:
+def create_session_token(
+    user_id: uuid.UUID,
+    org_id: uuid.UUID,
+    role: Role,
+    session_version: int,
+    ttl_seconds: int = 60 * 60 * 8,
+) -> str:
     now = int(time.time())
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "org": str(org_id),
         "role": role.value,
+        "sv": int(session_version),
         "iat": now,
         "exp": now + ttl_seconds,
     }
@@ -46,35 +53,49 @@ def create_session_token(user_id: uuid.UUID, org_id: uuid.UUID, role: Role, ttl_
     return f"{payload_b64}.{signature_b64}"
 
 
-def verify_session_token(token: str) -> dict[str, Any] | None:
+def verify_session_token_with_reason(token: str) -> tuple[dict[str, Any] | None, str | None]:
     try:
         payload_b64, signature_b64 = token.split(".", maxsplit=1)
     except ValueError:
-        return None
+        return None, "malformed"
 
     expected_signature = hmac.new(_secret_bytes(), payload_b64.encode("ascii"), hashlib.sha256).digest()
     try:
         actual_signature = _from_base64url(signature_b64)
     except Exception:
-        return None
+        return None, "malformed"
 
     if not hmac.compare_digest(expected_signature, actual_signature):
-        return None
+        return None, "invalid_signature"
 
     try:
         payload = json.loads(_from_base64url(payload_b64).decode("utf-8"))
     except Exception:
-        return None
+        return None, "malformed"
 
     if not isinstance(payload, dict):
-        return None
+        return None, "malformed"
 
     exp = payload.get("exp")
     if not isinstance(exp, int) or exp <= int(time.time()):
-        return None
+        return None, "expired"
 
-    required_fields = ("sub", "org", "role")
+    # Enforce runtime session max-age using current configuration, so session
+    # validation stays consistent even when TTL policy is tightened.
+    iat = payload.get("iat")
+    now = int(time.time())
+    if isinstance(iat, int):
+        ttl_seconds = int(max(1, settings.auth_session_ttl_seconds))
+        if iat + ttl_seconds <= now:
+            return None, "expired"
+
+    required_fields = ("sub", "org", "role", "sv")
     if any(field not in payload for field in required_fields):
-        return None
+        return None, "missing_fields"
 
+    return payload, None
+
+
+def verify_session_token(token: str) -> dict[str, Any] | None:
+    payload, _ = verify_session_token_with_reason(token)
     return payload

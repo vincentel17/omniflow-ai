@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from .auth_session import verify_session_token
 from .db import get_db
-from .models import Membership, Role
+from .models import Membership, Role, User
 from .settings import settings
 
 
@@ -82,9 +82,14 @@ def _context_from_cookie(db: Session, request: Request) -> RequestContext | None
     try:
         user_id = uuid.UUID(str(payload["sub"]))
         org_id = uuid.UUID(str(payload["org"]))
+        session_version = int(payload["sv"])
         _parse_role(str(payload["role"]))
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid auth session") from exc
+
+    user = db.scalar(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    if user is None or int(user.session_version) != session_version:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid auth session")
 
     membership = _load_membership(db=db, user_id=user_id, org_id=org_id)
     return RequestContext(current_user_id=user_id, current_org_id=org_id, current_role=membership.role)

@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     auth_cookie_name: str = "omniflow_session"
     auth_cookie_secure: bool = False
     auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    auth_csrf_cookie_name: str = "omniflow_csrf"
     auth_session_ttl_seconds: int = 28800
+    session_ttl_minutes: int = 480
     password_reset_preview_in_production: bool = False
     cors_allowed_origins: str = "http://localhost:13000,http://localhost:3000"
     ai_mode: str = "mock"
@@ -61,6 +63,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_non_dev_requirements(self) -> "Settings":
         self.database_url = _normalize_postgres_url(self.database_url)
+        # Keep legacy seconds setting aligned with the canonical minutes setting.
+        self.auth_session_ttl_seconds = int(max(1, self.session_ttl_minutes) * 60)
         missing: list[str] = []
         allowed_modes = {"mock", "live"}
         if self.ai_mode not in allowed_modes:

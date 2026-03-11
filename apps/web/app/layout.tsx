@@ -26,10 +26,18 @@ function envLabel(): string {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const session = await getRequestSessionContext();
+  if (!session) {
+    return (
+      <html className="dark" lang="en" suppressHydrationWarning>
+        <body className={inter.variable}>
+          <ToastProvider>{children}</ToastProvider>
+        </body>
+      </html>
+    );
+  }
+
   const packSlug = await getCurrentPackSlugForSession(session);
   const isRealEstate = packSlug === "real-estate";
-  const effectiveOrgName = session?.org_id ?? "unauthenticated";
-  const effectiveRole = session?.role ?? "guest";
 
   return (
     <html className="dark" lang="en" suppressHydrationWarning>
@@ -40,9 +48,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             connectorMode={process.env.NEXT_PUBLIC_CONNECTOR_MODE ?? "mock"}
             envLabel={envLabel()}
             isRealEstate={isRealEstate}
-            orgName={effectiveOrgName}
-            role={effectiveRole}
-            sessionMode={Boolean(session)}
+            orgName={session.org_id}
+            role={session.role}
+            sessionMode
           >
             {children}
           </AppShell>

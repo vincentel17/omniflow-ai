@@ -56,6 +56,28 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def security_headers_middleware(request: Request, call_next) -> Response:  # type: ignore[override]
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin"
+    return response
+
+
+@app.middleware("http")
+async def csrf_validation_middleware(request: Request, call_next) -> Response:  # type: ignore[override]
+    if request.method in {"POST", "PUT", "DELETE"}:
+        session_cookie = request.cookies.get(settings.auth_cookie_name)
+        if session_cookie:
+            csrf_cookie = request.cookies.get(settings.auth_csrf_cookie_name)
+            csrf_header = request.headers.get("x-csrf-token")
+            if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+                raise HTTPException(status_code=403, detail="csrf validation failed")
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def request_id_middleware(request: Request, call_next) -> Response:  # type: ignore[override]
     request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
     request.state.request_id = request_id
