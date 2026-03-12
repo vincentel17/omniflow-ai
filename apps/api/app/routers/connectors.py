@@ -5,7 +5,8 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
@@ -136,14 +137,14 @@ def _normalize_scopes(provider: str, scope_value: str | list[str] | None) -> lis
     return sorted(normalized)
 
 
-def _exchange_live_oauth_code(provider: str, code: str) -> dict[str, object]:
+def _exchange_live_oauth_code(provider: str, code: str, redirect_uri: str) -> dict[str, object]:
     client_id, client_secret = _provider_client_credentials(provider)
     payload = {
         "client_id": client_id,
         "client_secret": client_secret,
         "code": code,
         "grant_type": "authorization_code",
-        "redirect_uri": settings.oauth_redirect_uri,
+        "redirect_uri": redirect_uri,
     }
     try:
         with httpx.Client(timeout=15.0) as client:
@@ -218,6 +219,18 @@ def _resolve_live_account(provider: str, access_token: str) -> tuple[str, str]:
 def _ensure_provider(provider: str) -> None:
     if provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+
+def _request_base_url(request: Request) -> str:
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_proto and forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def _provider_redirect_uri(request: Request, provider: str) -> str:
+    return f"{_request_base_url(request)}/connectors/{provider}/callback"
 
 
 def _env_present(value: str | None) -> bool:
@@ -427,6 +440,7 @@ def connector_diagnostics_summary(
 def start_oauth(
     provider: str,
     payload: ConnectorStartRequest,
+    request: Request,
     db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
 ) -> ConnectorStartResponse:
@@ -434,14 +448,16 @@ def start_oauth(
     require_role(context, Role.ADMIN)
     _ensure_provider(provider)
 
-    if not settings.oauth_redirect_allowed(settings.oauth_redirect_uri):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="oauth redirect uri is not allowed")
-
     state = create_oauth_state(get_redis_client(), context.current_org_id, provider)
     mode = connector_mode_for_org(db, context.current_org_id)
     if mode == "live":
         ensure_org_active(db=db, org_id=context.current_org_id)
+        redirect_uri = _provider_redirect_uri(request, provider)
+        if not settings.oauth_redirect_allowed(redirect_uri):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="oauth redirect uri is not allowed")
     if mode == "mock":
+        if not settings.oauth_redirect_allowed(settings.oauth_redirect_uri):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="oauth redirect uri is not allowed")
         params = urlencode({"state": state, "code": "mock-code"})
         auth_url = f"{settings.oauth_redirect_uri}?{params}"
     else:
@@ -451,7 +467,7 @@ def start_oauth(
         params = urlencode(
             {
                 "client_id": client_id,
-                "redirect_uri": settings.oauth_redirect_uri,
+                "redirect_uri": redirect_uri,
                 "response_type": "code",
                 "state": state,
                 "scope": scope,
@@ -464,8 +480,9 @@ def start_oauth(
 
 
 @router.post("/{provider}/callback", response_model=ConnectorAccountResponse)
-def oauth_callback(
+def _complete_oauth_callback(
     provider: str,
+    request: Request,
     payload: ConnectorCallbackRequest,
     db: Session = Depends(get_db),
     context: RequestContext = Depends(get_request_context),
@@ -486,7 +503,7 @@ def oauth_callback(
     display_name = (payload.display_name or "").strip()
     expires_at: datetime | None = datetime.now(UTC)
     if mode == "live":
-        token_payload = _exchange_live_oauth_code(provider, payload.code)
+        token_payload = _exchange_live_oauth_code(provider, payload.code, _provider_redirect_uri(request, provider))
         if not account_ref:
             account_ref, resolved_display_name = _resolve_live_account(provider, str(token_payload["access_token"]))
             if not display_name:
@@ -597,6 +614,48 @@ def oauth_callback(
     db.commit()
     db.refresh(account)
     return _serialize_account(account)
+
+
+@router.post("/{provider}/callback", response_model=ConnectorAccountResponse)
+def oauth_callback(
+    provider: str,
+    payload: ConnectorCallbackRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+) -> ConnectorAccountResponse:
+    return _complete_oauth_callback(provider=provider, request=request, payload=payload, db=db, context=context)
+
+
+@router.get("/{provider}/callback")
+def oauth_callback_get(
+    provider: str,
+    request: Request,
+    state: str = Query(min_length=8, max_length=255),
+    code: str = Query(min_length=1, max_length=2048),
+    account_ref: str | None = Query(default=None, min_length=1, max_length=255),
+    display_name: str | None = Query(default=None, min_length=1, max_length=255),
+    db: Session = Depends(get_db),
+    context: RequestContext = Depends(get_request_context),
+):
+    account = _complete_oauth_callback(
+        provider=provider,
+        request=request,
+        payload=ConnectorCallbackRequest(
+            state=state,
+            code=code,
+            account_ref=account_ref,
+            display_name=display_name,
+        ),
+        db=db,
+        context=context,
+    )
+    return_to = request.query_params.get("return_to", "/settings/integrations/diagnostics")
+    if not return_to.startswith("/"):
+        return_to = "/settings/integrations/diagnostics"
+    separator = "&" if "?" in return_to else "?"
+    redirect_url = f"{return_to}{separator}oauth=ok&provider={provider}&account_id={account.id}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/accounts", response_model=list[ConnectorAccountResponse])

@@ -437,6 +437,7 @@ async def test_live_oauth_start_uses_provider_authorize_url(
 ) -> None:
     monkeypatch.setattr(connectors_router, "connector_mode_for_org", lambda *_args, **_kwargs: "live")
     monkeypatch.setattr(connectors_router, "ensure_org_active", lambda **_kwargs: None)
+    monkeypatch.setattr(type(settings), "oauth_redirect_allowed", lambda _self, _uri: True)
     monkeypatch.setattr(settings, client_id_attr, "client-id")
     monkeypatch.setattr(settings, client_secret_attr, "client-secret")
 
@@ -475,6 +476,7 @@ async def test_live_oauth_callback_exchanges_tokens_and_links_account(
 ) -> None:
     monkeypatch.setattr(connectors_router, "connector_mode_for_org", lambda *_args, **_kwargs: "live")
     monkeypatch.setattr(connectors_router, "ensure_org_active", lambda **_kwargs: None)
+    monkeypatch.setattr(type(settings), "oauth_redirect_allowed", lambda _self, _uri: True)
     if provider == "google-business-profile":
         monkeypatch.setattr(settings, "google_client_id", "client-id")
         monkeypatch.setattr(settings, "google_client_secret", "client-secret")
@@ -488,7 +490,7 @@ async def test_live_oauth_callback_exchanges_tokens_and_links_account(
     monkeypatch.setattr(
         connectors_router,
         "_exchange_live_oauth_code",
-        lambda _provider, _code: {
+        lambda _provider, _code, _redirect_uri: {
             "access_token": f"live-access-{provider}",
             "refresh_token": f"live-refresh-{provider}",
             "scope": "business.manage pages_manage_posts pages_messaging w_member_social r_organization_social",
@@ -527,3 +529,56 @@ async def test_live_oauth_callback_exchanges_tokens_and_links_account(
     )
     assert token is not None
     assert decrypt_token(token.access_token_enc) == f"live-access-{provider}"
+
+
+@pytest.mark.integration
+async def test_live_oauth_get_callback_completes_and_redirects(
+    seeded_context: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connectors_router, "connector_mode_for_org", lambda *_args, **_kwargs: "live")
+    monkeypatch.setattr(connectors_router, "ensure_org_active", lambda **_kwargs: None)
+    monkeypatch.setattr(type(settings), "oauth_redirect_allowed", lambda _self, _uri: True)
+    monkeypatch.setattr(settings, "google_client_id", "client-id")
+    monkeypatch.setattr(settings, "google_client_secret", "client-secret")
+    monkeypatch.setattr(
+        connectors_router,
+        "_exchange_live_oauth_code",
+        lambda _provider, _code, _redirect_uri: {
+            "access_token": "live-access-google",
+            "refresh_token": "live-refresh-google",
+            "scope": "business.manage",
+            "expires_in": 3600,
+        },
+    )
+    monkeypatch.setattr(
+        connectors_router,
+        "_resolve_live_account",
+        lambda _provider, _token: ("accounts/123", "GBP HQ"),
+    )
+
+    headers = dict(seeded_context)
+    headers["X-Omniflow-Role"] = Role.ADMIN.value
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        start = await client.post(
+            "/connectors/google-business-profile/start",
+            headers=headers,
+            json={"account_ref": "ignored", "display_name": "ignored"},
+        )
+        assert start.status_code == 200
+        state = start.json()["state"]
+
+        callback = await client.get(
+            "/connectors/google-business-profile/callback",
+            headers=headers,
+            params={"state": state, "code": "provider-code"},
+            follow_redirects=False,
+        )
+        assert callback.status_code == 303
+        location = callback.headers.get("location", "")
+        assert location.startswith("/settings/integrations/diagnostics")
+        assert "oauth=ok" in location
+
+        listed = await client.get("/connectors/accounts", headers=headers)
+        assert listed.status_code == 200
+        assert len(listed.json()) == 1
