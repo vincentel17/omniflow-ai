@@ -28,12 +28,35 @@ type FetchOptions = {
   body?: unknown;
 };
 
+async function getServerCookieHeader(): Promise<string | null> {
+  if (typeof window !== "undefined") {
+    return null;
+  }
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    const header = store
+      .getAll()
+      .map((entry) => `${entry.name}=${entry.value}`)
+      .join("; ");
+    return header || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+  const cookieHeader = await getServerCookieHeader();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader;
+  }
+
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method: options.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
     credentials: "include"
