@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -41,6 +42,9 @@ from ..tenancy import RequestContext, get_request_context, org_scoped, require_r
 router = APIRouter(prefix="/connectors", tags=["connectors"])
 
 SUPPORTED_PROVIDERS = ("google-business-profile", "meta", "linkedin")
+_GOOGLE_BUSINESS_MANAGE_SCOPE = "https://www.googleapis.com/auth/business.manage"
+_META_DEFAULT_SCOPES = ["pages_manage_posts", "pages_messaging", "pages_show_list"]
+_LINKEDIN_DEFAULT_SCOPES = ["w_member_social", "r_organization_social", "openid", "profile"]
 
 _REQUIRED_SCOPES: dict[str, dict[str, set[str]]] = {
     "google-business-profile": {
@@ -66,6 +70,149 @@ def _provider_is_configured(provider: str) -> bool:
     if provider == "google-business-profile":
         return bool(settings.google_client_id and settings.google_client_secret)
     return False
+
+
+def _provider_client_credentials(provider: str) -> tuple[str, str]:
+    if provider == "meta":
+        client_id = settings.meta_app_id
+        client_secret = settings.meta_app_secret
+    elif provider == "linkedin":
+        client_id = settings.linkedin_client_id
+        client_secret = settings.linkedin_client_secret
+    elif provider == "google-business-profile":
+        client_id = settings.google_client_id
+        client_secret = settings.google_client_secret
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="provider not configured for live oauth")
+    return client_id, client_secret
+
+
+def _provider_authorize_url(provider: str) -> str:
+    if provider == "google-business-profile":
+        return "https://accounts.google.com/o/oauth2/v2/auth"
+    if provider == "meta":
+        return "https://www.facebook.com/v19.0/dialog/oauth"
+    if provider == "linkedin":
+        return "https://www.linkedin.com/oauth/v2/authorization"
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+
+def _provider_token_url(provider: str) -> str:
+    if provider == "google-business-profile":
+        return "https://oauth2.googleapis.com/token"
+    if provider == "meta":
+        return "https://graph.facebook.com/v19.0/oauth/access_token"
+    if provider == "linkedin":
+        return "https://www.linkedin.com/oauth/v2/accessToken"
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+
+def _provider_scopes(provider: str) -> list[str]:
+    if provider == "google-business-profile":
+        return [_GOOGLE_BUSINESS_MANAGE_SCOPE]
+    if provider == "meta":
+        return _META_DEFAULT_SCOPES
+    if provider == "linkedin":
+        return _LINKEDIN_DEFAULT_SCOPES
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
+
+
+def _normalize_scopes(provider: str, scope_value: str | list[str] | None) -> list[str]:
+    if isinstance(scope_value, str):
+        scope_parts = [part.strip() for part in scope_value.replace(",", " ").split() if part.strip()]
+    elif isinstance(scope_value, list):
+        scope_parts = [str(part).strip() for part in scope_value if str(part).strip()]
+    else:
+        scope_parts = []
+
+    normalized = set(scope_parts)
+    if provider == "google-business-profile":
+        for scope in scope_parts:
+            if "business.manage" in scope:
+                normalized.add("business.manage")
+    return sorted(normalized)
+
+
+def _exchange_live_oauth_code(provider: str, code: str) -> dict[str, object]:
+    client_id, client_secret = _provider_client_credentials(provider)
+    payload = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": code,
+        "grant_type": "authorization_code",
+        "redirect_uri": settings.oauth_redirect_uri,
+    }
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            response = client.post(_provider_token_url(provider), data=payload)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="oauth token exchange failed") from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="oauth token exchange rejected")
+
+    token_payload = response.json()
+    access_token = str(token_payload.get("access_token", "")).strip()
+    if not access_token:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="oauth token exchange returned empty access token")
+    return token_payload
+
+
+def _resolve_live_account(provider: str, access_token: str) -> tuple[str, str]:
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            if provider == "google-business-profile":
+                response = client.get(
+                    "https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=1",
+                    headers=headers,
+                )
+                if response.status_code >= 400:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="unable to resolve google business account")
+                accounts = response.json().get("accounts")
+                if not isinstance(accounts, list) or not accounts:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="no google business account available")
+                first = accounts[0] if isinstance(accounts[0], dict) else {}
+                account_ref = str(first.get("name", "")).strip()
+                display_name = str(first.get("accountName", "")).strip()
+                if not account_ref:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="google business account ref missing")
+                return account_ref, display_name or account_ref
+
+            if provider == "meta":
+                response = client.get(
+                    "https://graph.facebook.com/v19.0/me/accounts?fields=id,name&limit=1",
+                    headers=headers,
+                )
+                if response.status_code >= 400:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="unable to resolve meta page account")
+                accounts = response.json().get("data")
+                if not isinstance(accounts, list) or not accounts:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="no meta page account available")
+                first = accounts[0] if isinstance(accounts[0], dict) else {}
+                account_ref = str(first.get("id", "")).strip()
+                display_name = str(first.get("name", "")).strip()
+                if not account_ref:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="meta account ref missing")
+                return account_ref, display_name or account_ref
+
+            if provider == "linkedin":
+                response = client.get("https://api.linkedin.com/v2/userinfo", headers=headers)
+                if response.status_code >= 400:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="unable to resolve linkedin account")
+                profile = response.json() if isinstance(response.json(), dict) else {}
+                account_ref = str(profile.get("sub", "")).strip()
+                display_name = str(profile.get("name", "")).strip()
+                if not account_ref:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="linkedin account ref missing")
+                return account_ref, display_name or account_ref
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="oauth account resolution failed") from exc
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unsupported provider")
 
 
 def _ensure_provider(provider: str) -> None:
@@ -298,15 +445,21 @@ def start_oauth(
         params = urlencode({"state": state, "code": "mock-code"})
         auth_url = f"{settings.oauth_redirect_uri}?{params}"
     else:
+        client_id, _ = _provider_client_credentials(provider)
+        scope_values = _provider_scopes(provider)
+        scope = " ".join(scope_values) if provider != "meta" else ",".join(scope_values)
         params = urlencode(
             {
-                "client_id": "configured-in-env",
+                "client_id": client_id,
                 "redirect_uri": settings.oauth_redirect_uri,
                 "response_type": "code",
                 "state": state,
+                "scope": scope,
             }
         )
-        auth_url = f"https://auth.{provider}.example/oauth/authorize?{params}"
+        if provider == "google-business-profile":
+            params = f"{params}&access_type=offline&prompt=consent"
+        auth_url = f"{_provider_authorize_url(provider)}?{params}"
     return ConnectorStartResponse(provider=provider, state=state, authorization_url=auth_url)
 
 
@@ -326,61 +479,83 @@ def oauth_callback(
     if state_data["provider"] != provider or state_data["org_id"] != str(context.current_org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="oauth state does not match tenant context")
 
+    mode = connector_mode_for_org(db, context.current_org_id)
+    if mode == "live":
+        ensure_org_active(db=db, org_id=context.current_org_id)
+    account_ref = (payload.account_ref or "").strip()
+    display_name = (payload.display_name or "").strip()
+    expires_at: datetime | None = datetime.now(UTC)
+    if mode == "live":
+        token_payload = _exchange_live_oauth_code(provider, payload.code)
+        if not account_ref:
+            account_ref, resolved_display_name = _resolve_live_account(provider, str(token_payload["access_token"]))
+            if not display_name:
+                display_name = resolved_display_name
+        access_token = str(token_payload["access_token"])
+        refresh_token = str(token_payload.get("refresh_token", "")).strip() or None
+        granted_scopes = _normalize_scopes(provider, token_payload.get("scope"))
+        if not granted_scopes:
+            granted_scopes = _normalize_scopes(provider, token_payload.get("scopes"))
+        if not granted_scopes:
+            granted_scopes = sorted(_REQUIRED_SCOPES.get(provider, {}).get("publish", set()) | _REQUIRED_SCOPES.get(provider, {}).get("inbox", set()))
+        expires_in = token_payload.get("expires_in")
+        if isinstance(expires_in, int):
+            expires_at = datetime.now(UTC) + timedelta(seconds=max(expires_in, 0))
+    else:
+        if not account_ref:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_ref is required in mock mode")
+        access_token = f"mock-access-{provider}-{account_ref}"
+        refresh_token = f"mock-refresh-{provider}-{account_ref}"
+        granted_scopes = sorted(_REQUIRED_SCOPES.get(provider, {}).get("publish", set()) | _REQUIRED_SCOPES.get(provider, {}).get("inbox", set()))
+
+    if not display_name:
+        display_name = account_ref
+
     account = db.scalar(
         select(ConnectorAccount).where(
             ConnectorAccount.org_id == context.current_org_id,
             ConnectorAccount.provider == provider,
-            ConnectorAccount.account_ref == payload.account_ref,
+            ConnectorAccount.account_ref == account_ref,
         )
     )
     if account is None:
         account = ConnectorAccount(
             org_id=context.current_org_id,
             provider=provider,
-            account_ref=payload.account_ref,
-            display_name=payload.display_name,
+            account_ref=account_ref,
+            display_name=display_name,
             status="linked",
         )
         db.add(account)
     else:
-        account.display_name = payload.display_name
+        account.display_name = display_name
         account.status = "linked"
         account.deleted_at = None
     db.flush()
-
-    mode = connector_mode_for_org(db, context.current_org_id)
-    if mode == "live":
-        ensure_org_active(db=db, org_id=context.current_org_id)
-    access_token = f"mock-access-{provider}-{payload.account_ref}"
-    refresh_token = f"mock-refresh-{provider}-{payload.account_ref}"
-    granted_scopes = sorted(_REQUIRED_SCOPES.get(provider, {}).get("publish", set()) | _REQUIRED_SCOPES.get(provider, {}).get("inbox", set()))
-
-    if mode == "live" and not _provider_is_configured(provider):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="provider not configured for live oauth")
 
     store_tokens(
         db=db,
         org_id=context.current_org_id,
         provider=provider,
-        account_ref=payload.account_ref,
+        account_ref=account_ref,
         access_token=access_token,
         refresh_token=refresh_token,
         scopes=granted_scopes,
-        expires_at=datetime.now(UTC),
+        expires_at=expires_at,
     )
 
     health = db.scalar(
         select(ConnectorHealth).where(
             ConnectorHealth.org_id == context.current_org_id,
             ConnectorHealth.provider == provider,
-            ConnectorHealth.account_ref == payload.account_ref,
+            ConnectorHealth.account_ref == account_ref,
         )
     )
     if health is None:
         health = ConnectorHealth(
             org_id=context.current_org_id,
             provider=provider,
-            account_ref=payload.account_ref,
+            account_ref=account_ref,
             last_ok_at=datetime.now(UTC),
             consecutive_failures=0,
         )
@@ -400,15 +575,15 @@ def oauth_callback(
         action="connector.linked",
         target_type="connector_account",
         target_id=str(account.id),
-        metadata_json={"provider": provider, "account_ref": payload.account_ref},
+        metadata_json={"provider": provider, "account_ref": account_ref},
     )
     write_audit_log(
         db=db,
         context=context,
         action="token.stored",
         target_type="oauth_token",
-        target_id=f"{provider}:{payload.account_ref}",
-        metadata_json={"provider": provider, "account_ref": payload.account_ref},
+        target_id=f"{provider}:{account_ref}",
+        metadata_json={"provider": provider, "account_ref": account_ref},
     )
     write_event(
         db=db,
@@ -416,7 +591,7 @@ def oauth_callback(
         source="connectors",
         channel=provider,
         event_type="CONNECTOR_LINKED",
-        payload_json={"provider": provider, "account_ref": payload.account_ref, "mode": mode},
+        payload_json={"provider": provider, "account_ref": account_ref, "mode": mode},
         actor_id=str(context.current_user_id),
     )
     db.commit()

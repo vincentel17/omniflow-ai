@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.main import app
+from app.routers import connectors as connectors_router
 from app.models import AuditLog, ConnectorHealth, ConnectorWorkflowRun, Event, OAuthToken, Org, ReputationReview, ReputationSource, Role
 from app.services.connector_manager import _breaker_state, get_publisher
 from app.services.gbp_reviews import _mock_reviews_page, sync_gbp_reviews_page
@@ -415,3 +416,114 @@ async def test_gbp_sync_pipeline_queues_and_processes_reviews(
     ).all()
     assert "CONNECTOR_SYNC_REQUESTED" in event_types
     assert "CONNECTOR_SYNC_SUCCESS" in event_types
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("provider", "client_id_attr", "client_secret_attr", "expected_prefix"),
+    [
+        ("google-business-profile", "google_client_id", "google_client_secret", "https://accounts.google.com/o/oauth2/v2/auth"),
+        ("meta", "meta_app_id", "meta_app_secret", "https://www.facebook.com/v19.0/dialog/oauth"),
+        ("linkedin", "linkedin_client_id", "linkedin_client_secret", "https://www.linkedin.com/oauth/v2/authorization"),
+    ],
+)
+async def test_live_oauth_start_uses_provider_authorize_url(
+    provider: str,
+    client_id_attr: str,
+    client_secret_attr: str,
+    expected_prefix: str,
+    seeded_context: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connectors_router, "connector_mode_for_org", lambda *_args, **_kwargs: "live")
+    monkeypatch.setattr(connectors_router, "ensure_org_active", lambda **_kwargs: None)
+    monkeypatch.setattr(settings, client_id_attr, "client-id")
+    monkeypatch.setattr(settings, client_secret_attr, "client-secret")
+
+    headers = dict(seeded_context)
+    headers["X-Omniflow-Role"] = Role.ADMIN.value
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/connectors/{provider}/start",
+            headers=headers,
+            json={"account_ref": "pre-fill", "display_name": "Pre Fill"},
+        )
+    assert response.status_code == 200
+    authorization_url = response.json()["authorization_url"]
+    assert authorization_url.startswith(expected_prefix)
+    assert "client_id=client-id" in authorization_url
+    assert "redirect_uri=" in authorization_url
+    assert "state=" in authorization_url
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("provider", "account_ref", "display_name"),
+    [
+        ("google-business-profile", "accounts/123", "GBP HQ"),
+        ("meta", "987654321", "Meta Page"),
+        ("linkedin", "linkedin-user-123", "LinkedIn User"),
+    ],
+)
+async def test_live_oauth_callback_exchanges_tokens_and_links_account(
+    provider: str,
+    account_ref: str,
+    display_name: str,
+    seeded_context: dict[str, str],
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connectors_router, "connector_mode_for_org", lambda *_args, **_kwargs: "live")
+    monkeypatch.setattr(connectors_router, "ensure_org_active", lambda **_kwargs: None)
+    if provider == "google-business-profile":
+        monkeypatch.setattr(settings, "google_client_id", "client-id")
+        monkeypatch.setattr(settings, "google_client_secret", "client-secret")
+    elif provider == "meta":
+        monkeypatch.setattr(settings, "meta_app_id", "client-id")
+        monkeypatch.setattr(settings, "meta_app_secret", "client-secret")
+    else:
+        monkeypatch.setattr(settings, "linkedin_client_id", "client-id")
+        monkeypatch.setattr(settings, "linkedin_client_secret", "client-secret")
+
+    monkeypatch.setattr(
+        connectors_router,
+        "_exchange_live_oauth_code",
+        lambda _provider, _code: {
+            "access_token": f"live-access-{provider}",
+            "refresh_token": f"live-refresh-{provider}",
+            "scope": "business.manage pages_manage_posts pages_messaging w_member_social r_organization_social",
+            "expires_in": 3600,
+        },
+    )
+    monkeypatch.setattr(connectors_router, "_resolve_live_account", lambda _provider, _token: (account_ref, display_name))
+
+    headers = dict(seeded_context)
+    headers["X-Omniflow-Role"] = Role.ADMIN.value
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        start = await client.post(
+            f"/connectors/{provider}/start",
+            headers=headers,
+            json={"account_ref": "ignored", "display_name": "ignored"},
+        )
+        assert start.status_code == 200
+        state = start.json()["state"]
+
+        callback = await client.post(
+            f"/connectors/{provider}/callback",
+            headers=headers,
+            json={"state": state, "code": "provider-code"},
+        )
+    assert callback.status_code == 200
+    assert callback.json()["account_ref"] == account_ref
+    assert callback.json()["display_name"] == display_name
+
+    token = db_session.scalar(
+        select(OAuthToken).where(
+            OAuthToken.org_id == uuid.UUID(seeded_context["X-Omniflow-Org-Id"]),
+            OAuthToken.provider == provider,
+            OAuthToken.account_ref == account_ref,
+            OAuthToken.deleted_at.is_(None),
+        )
+    )
+    assert token is not None
+    assert decrypt_token(token.access_token_enc) == f"live-access-{provider}"

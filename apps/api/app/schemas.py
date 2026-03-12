@@ -361,8 +361,8 @@ class ConnectorStartResponse(BaseModel):
 class ConnectorCallbackRequest(BaseModel):
     state: str = Field(min_length=8, max_length=255)
     code: str = Field(min_length=1, max_length=2048)
-    account_ref: str = Field(min_length=1, max_length=255)
-    display_name: str = Field(min_length=1, max_length=255)
+    account_ref: str | None = Field(default=None, min_length=1, max_length=255)
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class ConnectorAccountResponse(BaseModel):
